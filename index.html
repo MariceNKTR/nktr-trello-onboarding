@@ -12,6 +12,15 @@
     const ICON =
       "https://cdn.hyperdev.com/us-east-1%3A3d31b21c-01a0-4da2-8827-4bc6e88b7618%2Ficon-gray.svg";
 
+    function chooseCompany(t, company) {
+      return t.set("card", "shared", "company", company)
+        .then(function () {
+          return t.alert({
+            message: company + " saved"
+          });
+        });
+    }
+
     window.TrelloPowerUp.initialize({
 
       "card-buttons": function () {
@@ -23,12 +32,31 @@
           callback: function (t) {
             return t.popup({
               title: "Select company",
-
               items: [
-                { text: "ASS" },
-                { text: "BMS" },
-                { text: "BMS AMS" },
-                { text: "COVA" }
+                {
+                  text: "ASS",
+                  callback: function (t) {
+                    return chooseCompany(t, "ASS");
+                  }
+                },
+                {
+                  text: "BMS",
+                  callback: function (t) {
+                    return chooseCompany(t, "BMS");
+                  }
+                },
+                {
+                  text: "BMS AMS",
+                  callback: function (t) {
+                    return chooseCompany(t, "BMS AMS");
+                  }
+                },
+                {
+                  text: "COVA",
+                  callback: function (t) {
+                    return chooseCompany(t, "COVA");
+                  }
+                }
               ]
             });
           }
