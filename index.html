@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>NKTR Onboarding Progress</title>
+</head>
+
+<body>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+
+  <script>
+    const TOTAL_SEGMENTS = 10;
+
+    function makeProgressBar(checklists) {
+      const items = (checklists || []).flatMap(
+        checklist => checklist.checkItems || []
+      );
+
+      const total = items.length;
+
+      if (total === 0) {
+        return "";
+      }
+
+      const completed = items.filter(
+        item => item.state === "complete"
+      ).length;
+
+      const filled = Math.round(
+        (completed / total) * TOTAL_SEGMENTS
+      );
+
+      return "█".repeat(filled) +
+             "░".repeat(TOTAL_SEGMENTS - filled);
+    }
+
+    window.TrelloPowerUp.initialize({
+      "card-badges": function(t) {
+        return [{
+          dynamic: function() {
+            return t.card("checklists").then(function(card) {
+              return {
+                text: makeProgressBar(card.checklists),
+                refresh: 10
+              };
+            });
+          }
+        }];
+      }
+    });
+  </script>
+</body>
+</html>
