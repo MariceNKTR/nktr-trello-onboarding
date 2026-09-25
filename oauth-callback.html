@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>NKTR Onboarding Authorization</title>
+</head>
+
+<body>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+
+  <script>
+    const CLIENT_ID = "VGpJ9UId4pH0TheoJUoTuVczLidyM3IQ";
+    const REDIRECT_URI =
+      "https://maricenktr.github.io/nktr-trello-onboarding/oauth-callback.html";
+
+    const t = window.TrelloPowerUp.iframe({
+      clientId: CLIENT_ID,
+      redirectUri: REDIRECT_URI
+    });
+
+    window.addEventListener("load", async function () {
+      try {
+        await t.getOAuth2ApiClient().redirectUriCallback();
+      } catch (error) {
+        console.error(error);
+      }
+    });
+  </script>
+</body>
+</html>
