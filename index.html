@@ -9,80 +9,12 @@
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
 
   <script>
-    function chooseCompany(t, company) {
-      return t.set("card", "shared", "company", company)
-        .then(function () {
-          return t.closePopup();
-        });
-    }
-
-    function openCompanySelector(t) {
-      return t.popup({
-        title: "Select company",
-        items: [
-          {
-            text: "ASS",
-            callback: function (t) {
-              return chooseCompany(t, "ASS");
-            }
-          },
-          {
-            text: "BMS",
-            callback: function (t) {
-              return chooseCompany(t, "BMS");
-            }
-          },
-          {
-            text: "BMS AMS",
-            callback: function (t) {
-              return chooseCompany(t, "BMS AMS");
-            }
-          },
-          {
-            text: "COVA",
-            callback: function (t) {
-              return chooseCompany(t, "COVA");
-            }
-          }
-        ]
-      });
-    }
-
     window.TrelloPowerUp.initialize({
 
-      "card-detail-badges": function (t) {
-        return t.get("card", "shared", "company", null)
-          .then(function (company) {
-
-            if (company) {
-              return [{
-                title: "Company",
-                text: company
-              }];
-            }
-
-            return [{
-              title: "Company",
-              text: "Set company",
-              callback: function (t) {
-                return openCompanySelector(t);
-              }
-            }];
-          });
-      },
-
-      "card-badges": function (t) {
-        return t.get("card", "shared", "company", null)
-          .then(function (company) {
-
-            if (!company) {
-              return [];
-            }
-
-            return [{
-              text: company
-            }];
-          });
+      "card-badges": function () {
+        return [{
+          text: "BMS"
+        }];
       }
 
     });
