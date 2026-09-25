@@ -9,14 +9,46 @@
   <script src="https://p.trellocdn.com/power-up.min.js"></script>
 
   <script>
+    const CLIENT_ID = "VGpJ9UId4pH0TheoJUoTuVczLidyM3IQ";
+    const REDIRECT_URI =
+      "https://maricenktr.github.io/nktr-trello-onboarding/oauth-callback.html";
+
     window.TrelloPowerUp.initialize({
 
-      "card-badges": function () {
+      "card-buttons": function (t) {
         return [{
-          text: "BMS"
+          text: "Authorize NKTR Onboarding",
+          condition: "always",
+
+          callback: async function (t) {
+            try {
+              const client = t.getOAuth2ApiClient();
+
+              await client.authorize({
+                scopes: [
+                  "read:board:trello",
+                  "write:board:trello"
+                ]
+              });
+
+              await t.alert({
+                message: "Authorization successful"
+              });
+
+            } catch (error) {
+              console.error(error);
+
+              await t.alert({
+                message: "Authorization failed"
+              });
+            }
+          }
         }];
       }
 
+    }, {
+      clientId: CLIENT_ID,
+      redirectUri: REDIRECT_URI
     });
   </script>
 </body>
