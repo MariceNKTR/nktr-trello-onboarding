@@ -131,9 +131,7 @@
         await t.closePopup();
 
         await t.alert({
-          message:
-            company +
-            " onboarding loaded"
+          message: company + " onboarding loaded"
         });
 
       } catch (error) {
@@ -150,7 +148,6 @@
     function openCompanySelector(t) {
       return t.popup({
         title: "Select company",
-
         items: [
           {
             text: "ASS",
@@ -235,14 +232,17 @@
 
         const badges = [];
 
-        const duplicate = await isDuplicateCard(t);
+        badges.push({
+          dynamic: async function() {
+            const duplicate = await isDuplicateCard(t);
 
-        if (duplicate) {
-          badges.push({
-            text: "⚠ DUPLICATE",
-            color: "red"
-          });
-        }
+            return {
+              text: duplicate ? "⚠ DUPLICATE" : "",
+              color: duplicate ? "red" : null,
+              refresh: 10
+            };
+          }
+        });
 
         const company = await t.get(
           "card",
