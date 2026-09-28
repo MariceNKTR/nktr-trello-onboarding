@@ -25,6 +25,35 @@
       return card.name.includes("Stappenbron");
     }
 
+    function normalizeName(name) {
+      return (name || "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ");
+    }
+
+    async function isDuplicateCard(t) {
+      const currentCard = await t.card("id", "name");
+      const cards = await t.cards("id", "name");
+
+      if (isSourceCard(currentCard)) {
+        return false;
+      }
+
+      const currentName = normalizeName(currentCard.name);
+
+      if (!currentName) {
+        return false;
+      }
+
+      const matches = cards.filter(function(card) {
+        return !isSourceCard(card) &&
+               normalizeName(card.name) === currentName;
+      });
+
+      return matches.length > 1;
+    }
+
     async function copyCompanyChecklists(t, company) {
       const oauth = t.getOAuth2ApiClient();
       const token = await oauth.getAccessToken();
@@ -160,6 +189,18 @@
           return [];
         }
 
+        const badges = [];
+
+        const duplicate = await isDuplicateCard(t);
+
+        if (duplicate) {
+          badges.push({
+            title: "Warning",
+            text: "Duplicate employee name",
+            color: "red"
+          });
+        }
+
         const company = await t.get(
           "card",
           "shared",
@@ -168,19 +209,21 @@
         );
 
         if (company) {
-          return [{
+          badges.push({
             title: "Company",
             text: company
-          }];
+          });
+        } else {
+          badges.push({
+            title: "Company",
+            text: "Set company",
+            callback: function(t) {
+              return openCompanySelector(t);
+            }
+          });
         }
 
-        return [{
-          title: "Company",
-          text: "Set company",
-          callback: function(t) {
-            return openCompanySelector(t);
-          }
-        }];
+        return badges;
       },
 
       "card-badges": async function(t) {
@@ -190,6 +233,17 @@
           return [];
         }
 
+        const badges = [];
+
+        const duplicate = await isDuplicateCard(t);
+
+        if (duplicate) {
+          badges.push({
+            text: "⚠ DUPLICATE",
+            color: "red"
+          });
+        }
+
         const company = await t.get(
           "card",
           "shared",
@@ -197,13 +251,13 @@
           null
         );
 
-        if (!company) {
-          return [];
+        if (company) {
+          badges.push({
+            text: company
+          });
         }
 
-        return [{
-          text: company
-        }];
+        return badges;
       }
 
     }, {
