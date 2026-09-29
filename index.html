@@ -21,9 +21,6 @@
      * =========================================================
      * SOURCE CARD DETECTION
      * =========================================================
-     *
-     * Required naming:
-     * 🔒︎ ONB | COMPANY | Stappenbron
      */
 
     function getCompanyFromSourceCardName(name) {
@@ -55,7 +52,6 @@
 
       return cards
         .map(function(card) {
-
           const company =
             getCompanyFromSourceCardName(
               card.name
@@ -75,7 +71,6 @@
         })
         .filter(Boolean)
         .sort(function(a, b) {
-
           return a.company.localeCompare(
             b.company
           );
@@ -85,7 +80,7 @@
 
     /*
      * =========================================================
-     * DUPLICATE EMPLOYEE DETECTION
+     * DUPLICATE DETECTION
      * =========================================================
      */
 
@@ -98,7 +93,6 @@
 
 
     async function isDuplicateCard(t) {
-
       const currentCard =
         await t.card(
           "id",
@@ -126,7 +120,6 @@
 
       const matches =
         cards.filter(function(card) {
-
           if (isSourceCard(card)) {
             return false;
           }
@@ -148,35 +141,23 @@
      */
 
     async function getProgressBar(t) {
-
-      const result =
+      const card =
         await t.card(
-          "checklists"
+          "badges"
         );
 
-      const checklists =
-        result.checklists || [];
-
-      const items =
-        checklists.flatMap(
-          function(checklist) {
-            return checklist.checkItems || [];
-          }
-        );
+      const badges =
+        card.badges || {};
 
       const total =
-        items.length;
+        badges.checkItems || 0;
+
+      const completed =
+        badges.checkItemsChecked || 0;
 
       if (total === 0) {
         return "";
       }
-
-      const completed =
-        items.filter(
-          function(item) {
-            return item.state === "complete";
-          }
-        ).length;
 
       const filled =
         Math.round(
@@ -201,25 +182,20 @@
      */
 
     async function getOAuthToken(t) {
-
       try {
-
         const oauth =
           t.getOAuth2ApiClient();
 
         return await oauth.getAccessToken();
 
       } catch (error) {
-
         return null;
       }
     }
 
 
     async function authorizeUser(t) {
-
       try {
-
         const oauth =
           t.getOAuth2ApiClient();
 
@@ -236,7 +212,6 @@
         });
 
       } catch (error) {
-
         console.error(
           "Authorization failed:",
           error
@@ -260,12 +235,10 @@
       t,
       company
     ) {
-
       const token =
         await getOAuthToken(t);
 
       if (!token) {
-
         throw new Error(
           "Please authorize NKTR Onboarding first"
         );
@@ -286,17 +259,14 @@
       const sourceCard =
         sourceCards.find(
           function(card) {
-
             return (
-              card.company ===
-              company
+              card.company === company
             );
           }
         );
 
 
       if (!sourceCard) {
-
         throw new Error(
           "Template not found for " +
           company
@@ -308,7 +278,6 @@
         !sourceCard.checklists ||
         sourceCard.checklists.length === 0
       ) {
-
         throw new Error(
           company +
           " template has no checklists"
@@ -326,7 +295,6 @@
         existing.checklists &&
         existing.checklists.length > 0
       ) {
-
         throw new Error(
           "This employee already has checklists"
         );
@@ -354,7 +322,6 @@
               method: "POST",
 
               headers: {
-
                 "Authorization":
                   "Bearer " + token,
 
@@ -366,7 +333,6 @@
 
 
         if (!response.ok) {
-
           throw new Error(
             "Checklist copy failed: " +
             response.status
@@ -386,7 +352,6 @@
       t,
       company
     ) {
-
       try {
 
         const existingCompany =
@@ -399,7 +364,6 @@
 
 
         if (existingCompany) {
-
           throw new Error(
             "Company already set to " +
             existingCompany
@@ -471,7 +435,6 @@
           function(source) {
 
             return {
-
               text:
                 source.company,
 
@@ -503,10 +466,6 @@
 
     window.TrelloPowerUp.initialize({
 
-      /*
-       * OPEN CARD
-       */
-
       "card-detail-badges":
         async function(t) {
 
@@ -524,18 +483,12 @@
           const badges = [];
 
 
-          /*
-           * Duplicate warning
-           */
-
           const duplicate =
             await isDuplicateCard(t);
 
 
           if (duplicate) {
-
             badges.push({
-
               title:
                 "Warning",
 
@@ -548,18 +501,12 @@
           }
 
 
-          /*
-           * Authorization
-           */
-
           const token =
             await getOAuthToken(t);
 
 
           if (!token) {
-
             badges.push({
-
               title:
                 "NKTR Access",
 
@@ -568,16 +515,11 @@
 
               callback:
                 function(t) {
-
                   return authorizeUser(t);
                 }
             });
           }
 
-
-          /*
-           * Company
-           */
 
           const company =
             await t.get(
@@ -591,7 +533,6 @@
           if (company) {
 
             badges.push({
-
               title:
                 "Company",
 
@@ -602,7 +543,6 @@
           } else {
 
             badges.push({
-
               title:
                 "Company",
 
@@ -624,10 +564,6 @@
         },
 
 
-      /*
-       * CLOSED CARD
-       */
-
       "card-badges":
         async function(t) {
 
@@ -646,7 +582,7 @@
 
 
           /*
-           * Dynamic duplicate warning
+           * DUPLICATE
            */
 
           badges.push({
@@ -661,7 +597,6 @@
 
 
                 return {
-
                   text:
                     duplicate
                       ? "⚠ DUPLICATE"
@@ -680,7 +615,7 @@
 
 
           /*
-           * Dynamic progress bar
+           * PROGRESS
            */
 
           badges.push({
@@ -695,7 +630,6 @@
 
 
                 return {
-
                   text:
                     progress,
 
@@ -707,7 +641,7 @@
 
 
           /*
-           * Company
+           * COMPANY
            */
 
           const company =
