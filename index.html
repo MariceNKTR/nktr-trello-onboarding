@@ -6,11 +6,13 @@
 </head>
 
 <body>
+
 <script src="https://p.trellocdn.com/power-up.min.js"></script>
 
 <script>
 
-const CLIENT_ID = "VGpJ9UId4pH0TheoJUoTuVczLidyM3IQ";
+const CLIENT_ID =
+  "VGpJ9UId4pH0TheoJUoTuVczLidyM3IQ";
 
 const REDIRECT_URI =
   "https://maricenktr.github.io/nktr-trello-onboarding/oauth-callback.html";
@@ -22,7 +24,7 @@ const FULLY_OPERATIONAL_LIST =
 
 
 /* =========================================================
-   SOURCE / TEMPLATE DETECTION
+   TEMPLATE DETECTION
    ========================================================= */
 
 function getCompanyFromSourceCardName(name) {
@@ -69,9 +71,16 @@ async function getSourceCards(t) {
       }
 
       return {
-        id: card.id,
-        name: card.name,
-        company: company,
+
+        id:
+          card.id,
+
+        name:
+          card.name,
+
+        company:
+          company,
+
         checklists:
           card.checklists || []
       };
@@ -307,10 +316,122 @@ async function authorizeUser(t) {
 
 
 /* =========================================================
-   GREEN HALF COVER
+   CARD COVER
    ========================================================= */
 
-async function setGreenHalfCover(t) {
+async function setGreenHalfCover(
+  token,
+  cardId
+) {
+
+  const response =
+    await fetch(
+
+      "https://api.trello.com/1/cards/" +
+      cardId,
+
+      {
+
+        method:
+          "PUT",
+
+        headers: {
+
+          "Authorization":
+            "Bearer " + token,
+
+          "Accept":
+            "application/json",
+
+          "Content-Type":
+            "application/json"
+        },
+
+        body:
+          JSON.stringify({
+
+            cover: {
+
+              color:
+                "green",
+
+              size:
+                "normal",
+
+              brightness:
+                "dark"
+            }
+          })
+      }
+    );
+
+
+  if (!response.ok) {
+
+    throw new Error(
+      "Groene omslag mislukt: " +
+      response.status
+    );
+  }
+}
+
+
+async function removeCardCover(
+  token,
+  cardId
+) {
+
+  const response =
+    await fetch(
+
+      "https://api.trello.com/1/cards/" +
+      cardId,
+
+      {
+
+        method:
+          "PUT",
+
+        headers: {
+
+          "Authorization":
+            "Bearer " + token,
+
+          "Accept":
+            "application/json",
+
+          "Content-Type":
+            "application/json"
+        },
+
+        body:
+          JSON.stringify({
+
+            cover:
+              ""
+          })
+      }
+    );
+
+
+  if (!response.ok) {
+
+    throw new Error(
+      "Omslag verwijderen mislukt: " +
+      response.status
+    );
+  }
+}
+
+
+/*
+ * THIS IS THE IMPORTANT CHANGE.
+ *
+ * This function now runs on employee cards
+ * both inside AND outside Fully Operational.
+ */
+
+async function syncOperationalCover(t) {
 
   try {
 
@@ -333,14 +454,6 @@ async function setGreenHalfCover(t) {
       );
 
 
-    if (
-      list.name !==
-      FULLY_OPERATIONAL_LIST
-    ) {
-      return;
-    }
-
-
     const token =
       await getOAuthToken(t);
 
@@ -350,64 +463,57 @@ async function setGreenHalfCover(t) {
     }
 
 
-    const alreadyCorrect =
+    const isFullyOperational =
+      list.name ===
+      FULLY_OPERATIONAL_LIST;
+
+
+    const isGreen =
       card.cover &&
-      card.cover.color === "green" &&
+      card.cover.color === "green";
+
+
+    const isHalfCover =
+      card.cover &&
       card.cover.size === "normal";
 
 
-    if (alreadyCorrect) {
+    /*
+     * INSIDE FULLY OPERATIONAL
+     */
+
+    if (isFullyOperational) {
+
+      if (
+        !isGreen ||
+        !isHalfCover
+      ) {
+
+        await setGreenHalfCover(
+          token,
+          card.id
+        );
+      }
+
       return;
     }
 
 
-    const response =
-      await fetch(
+    /*
+     * OUTSIDE FULLY OPERATIONAL
+     *
+     * If the card still carries our
+     * green cover, remove it.
+     */
 
-        "https://api.trello.com/1/cards/" +
-        card.id,
+    if (
+      !isFullyOperational &&
+      isGreen
+    ) {
 
-        {
-
-          method:
-            "PUT",
-
-          headers: {
-
-            "Authorization":
-              "Bearer " + token,
-
-            "Accept":
-              "application/json",
-
-            "Content-Type":
-              "application/json"
-          },
-
-          body:
-            JSON.stringify({
-
-              cover: {
-
-                color:
-                  "green",
-
-                size:
-                  "normal",
-
-                brightness:
-                  "dark"
-              }
-            })
-        }
-      );
-
-
-    if (!response.ok) {
-
-      throw new Error(
-        "Groene kaartomslag mislukt: " +
-        response.status
+      await removeCardCover(
+        token,
+        card.id
       );
     }
 
@@ -415,7 +521,7 @@ async function setGreenHalfCover(t) {
   } catch (error) {
 
     console.error(
-      "Fully Operational omslag mislukt:",
+      "Omslagsynchronisatie mislukt:",
       error
     );
   }
@@ -900,10 +1006,10 @@ window.TrelloPowerUp.initialize({
 
 
               /*
-               * Keep/update the green HALF cover.
+               * Synchronize cover.
                */
 
-              await setGreenHalfCover(
+              await syncOperationalCover(
                 t
               );
 
@@ -942,13 +1048,21 @@ window.TrelloPowerUp.initialize({
 
 
       /*
-       * DUPLICATE
+       * DUPLICATE + COVER RESET
+       *
+       * This runs every 10 seconds even
+       * after the card leaves Fully Operational.
        */
 
       badges.push({
 
         dynamic:
           async function() {
+
+
+            await syncOperationalCover(
+              t
+            );
 
 
             const duplicate =
@@ -1042,5 +1156,6 @@ window.TrelloPowerUp.initialize({
 });
 
 </script>
+
 </body>
 </html>
