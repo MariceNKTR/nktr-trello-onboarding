@@ -41,6 +41,15 @@ function getCompanyFromSourceCardName(name) {
 }
 
 
+function normalizeCompany(company) {
+
+  return (company || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+
 function isSourceCard(card) {
 
   return !!getCompanyFromSourceCardName(
@@ -81,6 +90,9 @@ async function getSourceCards(t) {
         company:
           company,
 
+        companyKey:
+          normalizeCompany(company),
+
         checklists:
           card.checklists || []
       };
@@ -116,6 +128,47 @@ async function isTemplateEmpty(t) {
 
 
 /* =========================================================
+   DUPLICATE COMPANY / TEMPLATE DETECTION
+   ========================================================= */
+
+async function isDuplicateCompanyTemplate(t) {
+
+  const currentCard =
+    await t.card(
+      "name"
+    );
+
+  const company =
+    getCompanyFromSourceCardName(
+      currentCard.name
+    );
+
+  if (!company) {
+    return false;
+  }
+
+  const companyKey =
+    normalizeCompany(company);
+
+  const sourceCards =
+    await getSourceCards(t);
+
+  const matches =
+    sourceCards.filter(
+      function(source) {
+
+        return (
+          source.companyKey ===
+          companyKey
+        );
+      }
+    );
+
+  return matches.length > 1;
+}
+
+
+/* =========================================================
    DUPLICATE EMPLOYEE DETECTION
    ========================================================= */
 
@@ -136,11 +189,9 @@ async function isDuplicateCard(t) {
       "name"
     );
 
-
   if (isSourceCard(currentCard)) {
     return false;
   }
-
 
   const cards =
     await t.cards(
@@ -148,17 +199,14 @@ async function isDuplicateCard(t) {
       "name"
     );
 
-
   const currentName =
     normalizeName(
       currentCard.name
     );
 
-
   if (!currentName) {
     return false;
   }
-
 
   const matches =
     cards.filter(function(card) {
@@ -172,7 +220,6 @@ async function isDuplicateCard(t) {
         currentName
       );
     });
-
 
   return matches.length > 1;
 }
@@ -189,10 +236,8 @@ async function getChecklistProgress(t) {
       "badges"
     );
 
-
   const cardBadges =
     card.badges || {};
-
 
   return {
 
@@ -210,11 +255,9 @@ async function getProgressBar(t) {
   const progress =
     await getChecklistProgress(t);
 
-
   if (progress.total === 0) {
     return "";
   }
-
 
   const filled =
     Math.round(
@@ -224,7 +267,6 @@ async function getProgressBar(t) {
       ) *
       TOTAL_PROGRESS_BLOCKS
     );
-
 
   return (
     "█".repeat(filled) +
@@ -241,11 +283,9 @@ async function hasIncompleteSteps(t) {
   const progress =
     await getChecklistProgress(t);
 
-
   if (progress.total === 0) {
     return false;
   }
-
 
   return (
     progress.completed <
@@ -281,7 +321,6 @@ async function authorizeUser(t) {
     const oauth =
       t.getOAuth2ApiClient();
 
-
     await oauth.authorize({
 
       scopes: [
@@ -290,13 +329,11 @@ async function authorizeUser(t) {
       ]
     });
 
-
     await t.alert({
 
       message:
         "NKTR Onboarding is geautoriseerd"
     });
-
 
   } catch (error) {
 
@@ -304,7 +341,6 @@ async function authorizeUser(t) {
       "Autorisatie mislukt:",
       error
     );
-
 
     await t.alert({
 
@@ -365,7 +401,6 @@ async function setGreenHalfCover(
       }
     );
 
-
   if (!response.ok) {
 
     throw new Error(
@@ -413,7 +448,6 @@ async function removeCardCover(
       }
     );
 
-
   if (!response.ok) {
 
     throw new Error(
@@ -423,13 +457,6 @@ async function removeCardCover(
   }
 }
 
-
-/*
- * THIS IS THE IMPORTANT CHANGE.
- *
- * This function now runs on employee cards
- * both inside AND outside Fully Operational.
- */
 
 async function syncOperationalCover(t) {
 
@@ -442,45 +469,34 @@ async function syncOperationalCover(t) {
         "cover"
       );
 
-
     if (isSourceCard(card)) {
       return;
     }
-
 
     const list =
       await t.list(
         "name"
       );
 
-
     const token =
       await getOAuthToken(t);
-
 
     if (!token) {
       return;
     }
 
-
     const isFullyOperational =
       list.name ===
       FULLY_OPERATIONAL_LIST;
-
 
     const isGreen =
       card.cover &&
       card.cover.color === "green";
 
-
     const isHalfCover =
       card.cover &&
       card.cover.size === "normal";
 
-
-    /*
-     * INSIDE FULLY OPERATIONAL
-     */
 
     if (isFullyOperational) {
 
@@ -499,13 +515,6 @@ async function syncOperationalCover(t) {
     }
 
 
-    /*
-     * OUTSIDE FULLY OPERATIONAL
-     *
-     * If the card still carries our
-     * green cover, remove it.
-     */
-
     if (
       !isFullyOperational &&
       isGreen
@@ -516,7 +525,6 @@ async function syncOperationalCover(t) {
         card.id
       );
     }
-
 
   } catch (error) {
 
@@ -540,7 +548,6 @@ async function copyCompanyChecklists(
   const token =
     await getOAuthToken(t);
 
-
   if (!token) {
 
     throw new Error(
@@ -548,34 +555,52 @@ async function copyCompanyChecklists(
     );
   }
 
-
   const currentCard =
     await t.card(
       "id",
       "name"
     );
 
-
   const sourceCards =
     await getSourceCards(t);
 
+  const companyKey =
+    normalizeCompany(company);
 
-  const sourceCard =
-    sourceCards.find(
+
+  const matchingSources =
+    sourceCards.filter(
       function(card) {
 
         return (
-          card.company ===
-          company
+          card.companyKey ===
+          companyKey
         );
       }
     );
 
 
+  /*
+   * Do not arbitrarily choose between
+   * duplicate company templates.
+   */
+
+  if (matchingSources.length > 1) {
+
+    throw new Error(
+      "Bedrijf komt meerdere keren voor"
+    );
+  }
+
+
+  const sourceCard =
+    matchingSources[0];
+
+
   if (!sourceCard) {
 
     throw new Error(
-      "Sjabloon niet gevonden voor " +
+      "Stappenbron niet gevonden voor " +
       company
     );
   }
@@ -587,7 +612,7 @@ async function copyCompanyChecklists(
   ) {
 
     throw new Error(
-      "Het sjabloon van " +
+      "De stappenbron van " +
       company +
       " bevat geen checklists"
     );
@@ -624,7 +649,6 @@ async function copyCompanyChecklists(
         checklist.id
       );
 
-
     const response =
       await fetch(
         url,
@@ -643,7 +667,6 @@ async function copyCompanyChecklists(
           }
         }
       );
-
 
     if (!response.ok) {
 
@@ -675,7 +698,6 @@ async function chooseCompany(
         null
       );
 
-
     if (existingCompany) {
 
       throw new Error(
@@ -684,12 +706,10 @@ async function chooseCompany(
       );
     }
 
-
     await copyCompanyChecklists(
       t,
       company
     );
-
 
     await t.set(
       "card",
@@ -698,9 +718,7 @@ async function chooseCompany(
       company
     );
 
-
     await t.closePopup();
-
 
     await t.alert({
 
@@ -710,11 +728,9 @@ async function chooseCompany(
         " is geladen"
     });
 
-
   } catch (error) {
 
     console.error(error);
-
 
     await t.alert({
 
@@ -734,7 +750,6 @@ async function openCompanySelector(t) {
   const sourceCards =
     await getSourceCards(t);
 
-
   if (
     sourceCards.length === 0
   ) {
@@ -747,26 +762,63 @@ async function openCompanySelector(t) {
   }
 
 
-  const items =
-    sourceCards.map(
-      function(source) {
+  /*
+   * Each company appears only once,
+   * even when duplicate source cards exist.
+   */
 
-        return {
+  const uniqueCompanies =
+    new Map();
 
-          text:
-            source.company,
 
-          callback:
-            function(t) {
+  sourceCards.forEach(
+    function(source) {
 
-              return chooseCompany(
-                t,
-                source.company
-              );
-            }
-        };
+      if (
+        !uniqueCompanies.has(
+          source.companyKey
+        )
+      ) {
+
+        uniqueCompanies.set(
+          source.companyKey,
+          source.company
+        );
       }
-    );
+    }
+  );
+
+
+  const items =
+    Array
+      .from(
+        uniqueCompanies.values()
+      )
+
+      .sort(function(a, b) {
+
+        return a.localeCompare(b);
+      })
+
+      .map(
+        function(company) {
+
+          return {
+
+            text:
+              company,
+
+            callback:
+              function(t) {
+
+                return chooseCompany(
+                  t,
+                  company
+                );
+              }
+          };
+        }
+      );
 
 
   return t.popup({
@@ -807,13 +859,38 @@ window.TrelloPowerUp.initialize({
 
       if (isSourceCard(card)) {
 
+        const badges = [];
+
+
+        const duplicateCompany =
+          await isDuplicateCompanyTemplate(
+            t
+          );
+
+
+        if (duplicateCompany) {
+
+          badges.push({
+
+            title:
+              "Waarschuwing",
+
+            text:
+              "Dubbel bedrijf",
+
+            color:
+              "red"
+          });
+        }
+
+
         const empty =
           await isTemplateEmpty(t);
 
 
         if (empty) {
 
-          return [{
+          badges.push({
 
             title:
               "Waarschuwing",
@@ -823,11 +900,11 @@ window.TrelloPowerUp.initialize({
 
             color:
               "red"
-          }];
+          });
         }
 
 
-        return [];
+        return badges;
       }
 
 
@@ -835,7 +912,7 @@ window.TrelloPowerUp.initialize({
 
 
       /*
-       * DUPLICATE
+       * DUPLICATE EMPLOYEE
        */
 
       const duplicate =
@@ -960,8 +1037,32 @@ window.TrelloPowerUp.initialize({
             async function() {
 
 
+              const duplicateCompany =
+                await isDuplicateCompanyTemplate(
+                  t
+                );
+
+
+              if (duplicateCompany) {
+
+                return {
+
+                  text:
+                    "⚠ DUBBEL BEDRIJF",
+
+                  color:
+                    "red",
+
+                  refresh:
+                    10
+                };
+              }
+
+
               const empty =
-                await isTemplateEmpty(t);
+                await isTemplateEmpty(
+                  t
+                );
 
 
               return {
@@ -1005,10 +1106,6 @@ window.TrelloPowerUp.initialize({
             async function() {
 
 
-              /*
-               * Synchronize cover.
-               */
-
               await syncOperationalCover(
                 t
               );
@@ -1046,13 +1143,6 @@ window.TrelloPowerUp.initialize({
 
       const badges = [];
 
-
-      /*
-       * DUPLICATE + COVER RESET
-       *
-       * This runs every 10 seconds even
-       * after the card leaves Fully Operational.
-       */
 
       badges.push({
 
