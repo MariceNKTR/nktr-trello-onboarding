@@ -22,6 +22,9 @@ const TOTAL_PROGRESS_BLOCKS = 10;
 const FULLY_OPERATIONAL_LIST =
   "Fully Operational";
 
+const INACTIVE_LABEL =
+  "inactief";
+
 
 /* =========================================================
    TEMPLATE DETECTION
@@ -50,6 +53,28 @@ function normalizeCompany(company) {
 }
 
 
+function normalizeLabel(labelName) {
+
+  return (labelName || "")
+    .trim()
+    .toLowerCase();
+}
+
+
+function hasInactiveLabel(labels) {
+
+  return (labels || []).some(
+    function(label) {
+
+      return (
+        normalizeLabel(label.name) ===
+        INACTIVE_LABEL
+      );
+    }
+  );
+}
+
+
 function isSourceCard(card) {
 
   return !!getCompanyFromSourceCardName(
@@ -63,7 +88,8 @@ async function getSourceCards(t) {
   const cards = await t.cards(
     "id",
     "name",
-    "checklists"
+    "checklists",
+    "labels"
   );
 
   return cards
@@ -94,7 +120,15 @@ async function getSourceCards(t) {
           normalizeCompany(company),
 
         checklists:
-          card.checklists || []
+          card.checklists || [],
+
+        labels:
+          card.labels || [],
+
+        inactive:
+          hasInactiveLabel(
+            card.labels || []
+          )
       };
     })
 
@@ -606,6 +640,20 @@ async function copyCompanyChecklists(
   }
 
 
+  /*
+   * Extra safety:
+   * company may have become inactive
+   * after the menu was opened.
+   */
+
+  if (sourceCard.inactive) {
+
+    throw new Error(
+      "Dit bedrijf is inactief"
+    );
+  }
+
+
   if (
     !sourceCard.checklists ||
     sourceCard.checklists.length === 0
@@ -750,20 +798,35 @@ async function openCompanySelector(t) {
   const sourceCards =
     await getSourceCards(t);
 
+
+  /*
+   * Inactive templates remain valid source cards,
+   * but are not available for new employees.
+   */
+
+  const activeSourceCards =
+    sourceCards.filter(
+      function(source) {
+
+        return !source.inactive;
+      }
+    );
+
+
   if (
-    sourceCards.length === 0
+    activeSourceCards.length === 0
   ) {
 
     return t.alert({
 
       message:
-        "Geen onboardingssjablonen gevonden"
+        "Geen actieve onboardingssjablonen gevonden"
     });
   }
 
 
   /*
-   * Each company appears only once,
+   * Each active company appears only once,
    * even when duplicate source cards exist.
    */
 
@@ -771,7 +834,7 @@ async function openCompanySelector(t) {
     new Map();
 
 
-  sourceCards.forEach(
+  activeSourceCards.forEach(
     function(source) {
 
       if (
@@ -927,7 +990,7 @@ window.TrelloPowerUp.initialize({
             "Waarschuwing",
 
           text:
-            "Dubbele medewerker",
+            "Medewerker dubbel",
 
           color:
             "red"
@@ -1165,7 +1228,7 @@ window.TrelloPowerUp.initialize({
 
               text:
                 duplicate
-                  ? "⚠ DUPLICAAT"
+                  ? "⚠ MEDEWERKER DUBBEL"
                   : "",
 
               color:
