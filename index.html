@@ -14,18 +14,16 @@
     const REDIRECT_URI =
       "https://maricenktr.github.io/nktr-trello-onboarding/oauth-callback.html";
 
+    const TOTAL_PROGRESS_BLOCKS = 10;
+
 
     /*
      * =========================================================
      * SOURCE CARD DETECTION
      * =========================================================
      *
-     * Required naming structure:
-     *
+     * Required naming:
      * 🔒︎ ONB | COMPANY | Stappenbron
-     *
-     * Example:
-     * 🔒︎ ONB | BMS | Stappenbron
      */
 
     function getCompanyFromSourceCardName(name) {
@@ -57,6 +55,7 @@
 
       return cards
         .map(function(card) {
+
           const company =
             getCompanyFromSourceCardName(
               card.name
@@ -76,6 +75,7 @@
         })
         .filter(Boolean)
         .sort(function(a, b) {
+
           return a.company.localeCompare(
             b.company
           );
@@ -98,6 +98,7 @@
 
 
     async function isDuplicateCard(t) {
+
       const currentCard =
         await t.card(
           "id",
@@ -142,25 +143,83 @@
 
     /*
      * =========================================================
+     * PROGRESS BAR
+     * =========================================================
+     */
+
+    async function getProgressBar(t) {
+
+      const result =
+        await t.card(
+          "checklists"
+        );
+
+      const checklists =
+        result.checklists || [];
+
+      const items =
+        checklists.flatMap(
+          function(checklist) {
+            return checklist.checkItems || [];
+          }
+        );
+
+      const total =
+        items.length;
+
+      if (total === 0) {
+        return "";
+      }
+
+      const completed =
+        items.filter(
+          function(item) {
+            return item.state === "complete";
+          }
+        ).length;
+
+      const filled =
+        Math.round(
+          (completed / total) *
+          TOTAL_PROGRESS_BLOCKS
+        );
+
+      return (
+        "█".repeat(filled) +
+        "░".repeat(
+          TOTAL_PROGRESS_BLOCKS -
+          filled
+        )
+      );
+    }
+
+
+    /*
+     * =========================================================
      * OAUTH
      * =========================================================
      */
 
     async function getOAuthToken(t) {
+
       try {
+
         const oauth =
           t.getOAuth2ApiClient();
 
         return await oauth.getAccessToken();
 
       } catch (error) {
+
         return null;
       }
     }
 
 
     async function authorizeUser(t) {
+
       try {
+
         const oauth =
           t.getOAuth2ApiClient();
 
@@ -177,6 +236,7 @@
         });
 
       } catch (error) {
+
         console.error(
           "Authorization failed:",
           error
@@ -192,7 +252,7 @@
 
     /*
      * =========================================================
-     * COPY CHECKLISTS FROM SOURCE CARD
+     * COPY COMPANY CHECKLISTS
      * =========================================================
      */
 
@@ -200,10 +260,12 @@
       t,
       company
     ) {
+
       const token =
         await getOAuthToken(t);
 
       if (!token) {
+
         throw new Error(
           "Please authorize NKTR Onboarding first"
         );
@@ -224,14 +286,17 @@
       const sourceCard =
         sourceCards.find(
           function(card) {
+
             return (
-              card.company === company
+              card.company ===
+              company
             );
           }
         );
 
 
       if (!sourceCard) {
+
         throw new Error(
           "Template not found for " +
           company
@@ -243,6 +308,7 @@
         !sourceCard.checklists ||
         sourceCard.checklists.length === 0
       ) {
+
         throw new Error(
           company +
           " template has no checklists"
@@ -260,19 +326,12 @@
         existing.checklists &&
         existing.checklists.length > 0
       ) {
+
         throw new Error(
           "This employee already has checklists"
         );
       }
 
-
-      /*
-       * Copy every checklist found on the
-       * source card.
-       *
-       * Therefore FASE 4, FASE 5, etc.
-       * automatically work in the future.
-       */
 
       for (
         const checklist
@@ -295,6 +354,7 @@
               method: "POST",
 
               headers: {
+
                 "Authorization":
                   "Bearer " + token,
 
@@ -306,6 +366,7 @@
 
 
         if (!response.ok) {
+
           throw new Error(
             "Checklist copy failed: " +
             response.status
@@ -325,11 +386,8 @@
       t,
       company
     ) {
-      try {
 
-        /*
-         * Company can only be set once.
-         */
+      try {
 
         const existingCompany =
           await t.get(
@@ -341,6 +399,7 @@
 
 
         if (existingCompany) {
+
           throw new Error(
             "Company already set to " +
             existingCompany
@@ -375,7 +434,6 @@
       } catch (error) {
 
         console.error(error);
-
 
         await t.alert({
           message:
@@ -413,7 +471,9 @@
           function(source) {
 
             return {
-              text: source.company,
+
+              text:
+                source.company,
 
               callback:
                 function(t) {
@@ -444,9 +504,7 @@
     window.TrelloPowerUp.initialize({
 
       /*
-       * -------------------------------------------------------
-       * OPEN CARD BADGES
-       * -------------------------------------------------------
+       * OPEN CARD
        */
 
       "card-detail-badges":
@@ -458,10 +516,6 @@
             );
 
 
-          /*
-           * Source cards don't get employee UI.
-           */
-
           if (isSourceCard(card)) {
             return [];
           }
@@ -471,7 +525,7 @@
 
 
           /*
-           * Duplicate warning.
+           * Duplicate warning
            */
 
           const duplicate =
@@ -481,19 +535,21 @@
           if (duplicate) {
 
             badges.push({
-              title: "Warning",
+
+              title:
+                "Warning",
+
               text:
                 "Duplicate employee name",
-              color: "red"
+
+              color:
+                "red"
             });
           }
 
 
           /*
-           * Authorization badge.
-           *
-           * Visible only to users who have
-           * not authorized NKTR Onboarding.
+           * Authorization
            */
 
           const token =
@@ -503,8 +559,12 @@
           if (!token) {
 
             badges.push({
-              title: "NKTR Access",
-              text: "Authorize",
+
+              title:
+                "NKTR Access",
+
+              text:
+                "Authorize",
 
               callback:
                 function(t) {
@@ -516,7 +576,7 @@
 
 
           /*
-           * Company badge.
+           * Company
            */
 
           const company =
@@ -531,15 +591,23 @@
           if (company) {
 
             badges.push({
-              title: "Company",
-              text: company
+
+              title:
+                "Company",
+
+              text:
+                company
             });
 
           } else {
 
             badges.push({
-              title: "Company",
-              text: "Set company",
+
+              title:
+                "Company",
+
+              text:
+                "Set company",
 
               callback:
                 function(t) {
@@ -557,9 +625,7 @@
 
 
       /*
-       * -------------------------------------------------------
-       * CLOSED CARD BADGES
-       * -------------------------------------------------------
+       * CLOSED CARD
        */
 
       "card-badges":
@@ -580,10 +646,11 @@
 
 
           /*
-           * Dynamic duplicate warning.
+           * Dynamic duplicate warning
            */
 
           badges.push({
+
             dynamic:
               async function() {
 
@@ -594,6 +661,7 @@
 
 
                 return {
+
                   text:
                     duplicate
                       ? "⚠ DUPLICATE"
@@ -604,14 +672,42 @@
                       ? "red"
                       : null,
 
-                  refresh: 10
+                  refresh:
+                    10
                 };
               }
           });
 
 
           /*
-           * Company on closed card.
+           * Dynamic progress bar
+           */
+
+          badges.push({
+
+            dynamic:
+              async function() {
+
+                const progress =
+                  await getProgressBar(
+                    t
+                  );
+
+
+                return {
+
+                  text:
+                    progress,
+
+                  refresh:
+                    10
+                };
+              }
+          });
+
+
+          /*
+           * Company
            */
 
           const company =
@@ -626,7 +722,8 @@
           if (company) {
 
             badges.push({
-              text: company
+              text:
+                company
             });
           }
 
@@ -637,8 +734,11 @@
 
     }, {
 
-      clientId: CLIENT_ID,
-      redirectUri: REDIRECT_URI
+      clientId:
+        CLIENT_ID,
+
+      redirectUri:
+        REDIRECT_URI
 
     });
 
