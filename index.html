@@ -318,14 +318,9 @@ function namesPossiblyMatch(
     getNameParts(secondName);
 
 
-  /*
-   * Require at least:
-   * First name + surname / initial
-   */
-
   if (
-    firstParts.length < 2 ||
-    secondParts.length < 2
+    firstParts.length === 0 ||
+    secondParts.length === 0
   ) {
     return false;
   }
@@ -357,15 +352,37 @@ function namesPossiblyMatch(
 
 
   /*
-   * Compare everything after the first name.
+   * One card only contains the first name,
+   * while the other contains more detail.
    *
    * Examples:
-   * Roy S     ↔ Roy Sikk
-   * Roy Sik   ↔ Roy Sikk
+   * Roy ↔ Roy Sikk
+   * Piet ↔ Piet de Boer
+   */
+
+  if (
+    firstParts.length === 1 &&
+    secondParts.length > 1
+  ) {
+    return true;
+  }
+
+
+  if (
+    secondParts.length === 1 &&
+    firstParts.length > 1
+  ) {
+    return true;
+  }
+
+
+  /*
+   * If both contain surname information,
+   * compare everything after the first name.
    *
-   * But:
-   * Roy de Vries ↔ Roy de Boer
-   * will NOT match.
+   * Examples:
+   * Roy S ↔ Roy Sikk
+   * Roy Sik ↔ Roy Sikk
    */
 
   const firstRest =
