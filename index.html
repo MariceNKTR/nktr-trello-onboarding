@@ -21,6 +21,8 @@
       "COVA": "🔒︎ ONB | COVA | Stappenbron"
     };
 
+    const FULLY_OPERATIONAL_LIST = "Fully Operational";
+
     function isSourceCard(card) {
       return card.name.includes("Stappenbron");
     }
@@ -47,11 +49,144 @@
       }
 
       const matches = cards.filter(function(card) {
-        return !isSourceCard(card) &&
-               normalizeName(card.name) === currentName;
+        return (
+          !isSourceCard(card) &&
+          normalizeName(card.name) === currentName
+        );
       });
 
       return matches.length > 1;
+    }
+
+    async function getOAuthToken(t) {
+      try {
+        const oauth = t.getOAuth2ApiClient();
+        return await oauth.getAccessToken();
+      } catch (error) {
+        return null;
+      }
+    }
+
+    async function updateCardCover(token, cardId, cover) {
+      const response = await fetch(
+        "https://api.trello.com/1/cards/" + cardId,
+        {
+          method: "PUT",
+          headers: {
+            "Authorization": "Bearer " + token,
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            cover: cover
+          })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          "Cover update failed: " + response.status
+        );
+      }
+
+      return response.json();
+    }
+
+    async function syncOperationalCover(t) {
+      try {
+        const card = await t.card(
+          "id",
+          "name",
+          "cover"
+        );
+
+        if (isSourceCard(card)) {
+          return;
+        }
+
+        const list = await t.list("name");
+
+        const shouldBeGreen =
+          list.name === FULLY_OPERATIONAL_LIST;
+
+        const applied = await t.get(
+          "card",
+          "shared",
+          "operationalGreenApplied",
+          false
+        );
+
+        const isAlreadyGreen =
+          card.cover &&
+          card.cover.color === "green";
+
+        const token = await getOAuthToken(t);
+
+        if (!token) {
+          return;
+        }
+
+        /*
+         * ENTERS FULLY OPERATIONAL
+         */
+        if (shouldBeGreen) {
+          if (!isAlreadyGreen) {
+            await updateCardCover(
+              token,
+              card.id,
+              {
+                color: "green",
+                size: "full",
+                brightness: "dark"
+              }
+            );
+          }
+
+          if (!applied) {
+            await t.set(
+              "card",
+              "shared",
+              "operationalGreenApplied",
+              true
+            );
+          }
+
+          return;
+        }
+
+        /*
+         * LEAVES FULLY OPERATIONAL
+         *
+         * Only remove the cover if this Power-Up
+         * previously applied it.
+         */
+        if (!shouldBeGreen && applied) {
+          await updateCardCover(
+            token,
+            card.id,
+            {
+              color: null,
+              idAttachment: null,
+              idUploadedBackground: null,
+              size: "normal",
+              brightness: "light"
+            }
+          );
+
+          await t.set(
+            "card",
+            "shared",
+            "operationalGreenApplied",
+            false
+          );
+        }
+
+      } catch (error) {
+        console.error(
+          "Operational cover sync failed:",
+          error
+        );
+      }
     }
 
     async function copyCompanyChecklists(t, company) {
@@ -62,7 +197,10 @@
         throw new Error("Not authorized");
       }
 
-      const currentCard = await t.card("id", "name");
+      const currentCard = await t.card(
+        "id",
+        "name"
+      );
 
       const cards = await t.cards(
         "id",
@@ -70,19 +208,24 @@
         "checklists"
       );
 
-      const sourceName = SOURCE_CARDS[company];
+      const sourceName =
+        SOURCE_CARDS[company];
 
-      const sourceCard = cards.find(function(card) {
-        return card.name === sourceName;
-      });
+      const sourceCard = cards.find(
+        function(card) {
+          return card.name === sourceName;
+        }
+      );
 
       if (!sourceCard) {
         throw new Error(
-          "Source card not found: " + sourceName
+          "Source card not found: " +
+          sourceName
         );
       }
 
-      const existing = await t.card("checklists");
+      const existing =
+        await t.card("checklists");
 
       if (
         existing.checklists &&
@@ -93,20 +236,28 @@
         );
       }
 
-      for (const checklist of sourceCard.checklists) {
+      for (
+        const checklist
+        of sourceCard.checklists
+      ) {
         const url =
           "https://api.trello.com/1/cards/" +
           currentCard.id +
           "/checklists?idChecklistSource=" +
-          encodeURIComponent(checklist.id);
+          encodeURIComponent(
+            checklist.id
+          );
 
-        const response = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Authorization": "Bearer " + token,
-            "Accept": "application/json"
-          }
-        });
+        const response =
+          await fetch(url, {
+            method: "POST",
+            headers: {
+              "Authorization":
+                "Bearer " + token,
+              "Accept":
+                "application/json"
+            }
+          });
 
         if (!response.ok) {
           throw new Error(
@@ -117,9 +268,15 @@
       }
     }
 
-    async function chooseCompany(t, company) {
+    async function chooseCompany(
+      t,
+      company
+    ) {
       try {
-        await copyCompanyChecklists(t, company);
+        await copyCompanyChecklists(
+          t,
+          company
+        );
 
         await t.set(
           "card",
@@ -131,7 +288,9 @@
         await t.closePopup();
 
         await t.alert({
-          message: company + " onboarding loaded"
+          message:
+            company +
+            " onboarding loaded"
         });
 
       } catch (error) {
@@ -148,29 +307,42 @@
     function openCompanySelector(t) {
       return t.popup({
         title: "Select company",
+
         items: [
           {
             text: "ASS",
             callback: function(t) {
-              return chooseCompany(t, "ASS");
+              return chooseCompany(
+                t,
+                "ASS"
+              );
             }
           },
           {
             text: "BMS",
             callback: function(t) {
-              return chooseCompany(t, "BMS");
+              return chooseCompany(
+                t,
+                "BMS"
+              );
             }
           },
           {
             text: "BMS AMS",
             callback: function(t) {
-              return chooseCompany(t, "BMS AMS");
+              return chooseCompany(
+                t,
+                "BMS AMS"
+              );
             }
           },
           {
             text: "COVA",
             callback: function(t) {
-              return chooseCompany(t, "COVA");
+              return chooseCompany(
+                t,
+                "COVA"
+              );
             }
           }
         ]
@@ -179,86 +351,122 @@
 
     window.TrelloPowerUp.initialize({
 
-      "card-detail-badges": async function(t) {
-        const card = await t.card("name");
+      "card-detail-badges":
+        async function(t) {
 
-        if (isSourceCard(card)) {
-          return [];
-        }
+          const card =
+            await t.card("name");
 
-        const badges = [];
-
-        const duplicate = await isDuplicateCard(t);
-
-        if (duplicate) {
-          badges.push({
-            title: "Warning",
-            text: "Duplicate employee name",
-            color: "red"
-          });
-        }
-
-        const company = await t.get(
-          "card",
-          "shared",
-          "company",
-          null
-        );
-
-        if (company) {
-          badges.push({
-            title: "Company",
-            text: company
-          });
-        } else {
-          badges.push({
-            title: "Company",
-            text: "Set company",
-            callback: function(t) {
-              return openCompanySelector(t);
-            }
-          });
-        }
-
-        return badges;
-      },
-
-      "card-badges": async function(t) {
-        const card = await t.card("name");
-
-        if (isSourceCard(card)) {
-          return [];
-        }
-
-        const badges = [];
-
-        badges.push({
-          dynamic: async function() {
-            const duplicate = await isDuplicateCard(t);
-
-            return {
-              text: duplicate ? "⚠ DUPLICATE" : "",
-              color: duplicate ? "red" : null,
-              refresh: 10
-            };
+          if (isSourceCard(card)) {
+            return [];
           }
-        });
 
-        const company = await t.get(
-          "card",
-          "shared",
-          "company",
-          null
-        );
+          const badges = [];
 
-        if (company) {
+          const duplicate =
+            await isDuplicateCard(t);
+
+          if (duplicate) {
+            badges.push({
+              title: "Warning",
+              text:
+                "Duplicate employee name",
+              color: "red"
+            });
+          }
+
+          const company =
+            await t.get(
+              "card",
+              "shared",
+              "company",
+              null
+            );
+
+          if (company) {
+            badges.push({
+              title: "Company",
+              text: company
+            });
+          } else {
+            badges.push({
+              title: "Company",
+              text: "Set company",
+
+              callback:
+                function(t) {
+                  return openCompanySelector(
+                    t
+                  );
+                }
+            });
+          }
+
+          return badges;
+        },
+
+      "card-badges":
+        async function(t) {
+
+          const card =
+            await t.card("name");
+
+          if (isSourceCard(card)) {
+            return [];
+          }
+
+          const badges = [];
+
+          /*
+           * This dynamic badge already keeps
+           * duplicate warnings fresh.
+           *
+           * We also use its 10-second refresh
+           * to synchronize the green cover.
+           */
           badges.push({
-            text: company
-          });
-        }
+            dynamic:
+              async function() {
 
-        return badges;
-      }
+                await syncOperationalCover(
+                  t
+                );
+
+                const duplicate =
+                  await isDuplicateCard(
+                    t
+                  );
+
+                return {
+                  text:
+                    duplicate
+                      ? "⚠ DUPLICATE"
+                      : "",
+                  color:
+                    duplicate
+                      ? "red"
+                      : null,
+                  refresh: 10
+                };
+              }
+          });
+
+          const company =
+            await t.get(
+              "card",
+              "shared",
+              "company",
+              null
+            );
+
+          if (company) {
+            badges.push({
+              text: company
+            });
+          }
+
+          return badges;
+        }
 
     }, {
       clientId: CLIENT_ID,
