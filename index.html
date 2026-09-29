@@ -95,7 +95,8 @@ function isSeparatorCard(card) {
       : "";
 
   return (
-    name.startsWith("──")
+    name.startsWith("──") ||
+    name.startsWith("↓↓↓↓")
   );
 }
 
@@ -326,10 +327,6 @@ function namesPossiblyMatch(
   }
 
 
-  /*
-   * First names must match exactly.
-   */
-
   if (
     firstParts[0] !==
     secondParts[0]
@@ -338,11 +335,6 @@ function namesPossiblyMatch(
   }
 
 
-  /*
-   * Exact full names are handled by
-   * MEDEWERKER DUBBEL instead.
-   */
-
   if (
     normalizeName(firstName) ===
     normalizeName(secondName)
@@ -350,15 +342,6 @@ function namesPossiblyMatch(
     return false;
   }
 
-
-  /*
-   * One card only contains the first name,
-   * while the other contains more detail.
-   *
-   * Examples:
-   * Roy ↔ Roy Sikk
-   * Piet ↔ Piet de Boer
-   */
 
   if (
     firstParts.length === 1 &&
@@ -375,15 +358,6 @@ function namesPossiblyMatch(
     return true;
   }
 
-
-  /*
-   * If both contain surname information,
-   * compare everything after the first name.
-   *
-   * Examples:
-   * Roy S ↔ Roy Sikk
-   * Roy Sik ↔ Roy Sikk
-   */
 
   const firstRest =
     firstParts
@@ -430,10 +404,6 @@ async function isPossibleDuplicateCard(t) {
     return false;
   }
 
-
-  /*
-   * Exact duplicate takes priority.
-   */
 
   const exactDuplicate =
     await isDuplicateCard(t);
@@ -1110,18 +1080,10 @@ window.TrelloPowerUp.initialize({
         );
 
 
-      /*
-       * SEPARATOR
-       */
-
       if (isSeparatorCard(card)) {
         return [];
       }
 
-
-      /*
-       * TEMPLATE CARD
-       */
 
       if (isSourceCard(card)) {
 
@@ -1177,10 +1139,6 @@ window.TrelloPowerUp.initialize({
       const badges = [];
 
 
-      /*
-       * DUPLICATE EMPLOYEE
-       */
-
       const duplicate =
         await isDuplicateCard(t);
 
@@ -1224,10 +1182,6 @@ window.TrelloPowerUp.initialize({
       }
 
 
-      /*
-       * AUTHORIZATION
-       */
-
       const token =
         await getOAuthToken(t);
 
@@ -1250,10 +1204,6 @@ window.TrelloPowerUp.initialize({
         });
       }
 
-
-      /*
-       * COMPANY
-       */
 
       const company =
         await t.get(
@@ -1314,18 +1264,10 @@ window.TrelloPowerUp.initialize({
         );
 
 
-      /*
-       * SEPARATOR
-       */
-
       if (isSeparatorCard(card)) {
         return [];
       }
 
-
-      /*
-       * TEMPLATE CARD
-       */
 
       if (isSourceCard(card)) {
 
@@ -1389,10 +1331,6 @@ window.TrelloPowerUp.initialize({
         );
 
 
-      /*
-       * FULLY OPERATIONAL
-       */
-
       if (
         list.name ===
         FULLY_OPERATIONAL_LIST
@@ -1434,10 +1372,6 @@ window.TrelloPowerUp.initialize({
         }];
       }
 
-
-      /*
-       * NORMAL EMPLOYEE CARD
-       */
 
       const badges = [];
 
@@ -1500,10 +1434,6 @@ window.TrelloPowerUp.initialize({
       });
 
 
-      /*
-       * PROGRESS
-       */
-
       badges.push({
 
         dynamic:
@@ -1527,10 +1457,6 @@ window.TrelloPowerUp.initialize({
           }
       });
 
-
-      /*
-       * COMPANY
-       */
 
       const company =
         await t.get(
