@@ -15,6 +15,7 @@
       "https://maricenktr.github.io/nktr-trello-onboarding/oauth-callback.html";
 
     const TOTAL_PROGRESS_BLOCKS = 10;
+    const FULLY_OPERATIONAL_LIST = "Fully Operational";
 
 
     /*
@@ -52,6 +53,7 @@
 
       return cards
         .map(function(card) {
+
           const company =
             getCompanyFromSourceCardName(
               card.name
@@ -71,6 +73,7 @@
         })
         .filter(Boolean)
         .sort(function(a, b) {
+
           return a.company.localeCompare(
             b.company
           );
@@ -93,6 +96,7 @@
 
 
     async function isDuplicateCard(t) {
+
       const currentCard =
         await t.card(
           "id",
@@ -120,6 +124,7 @@
 
       const matches =
         cards.filter(function(card) {
+
           if (isSourceCard(card)) {
             return false;
           }
@@ -136,32 +141,45 @@
 
     /*
      * =========================================================
-     * PROGRESS BAR
+     * CHECKLIST PROGRESS
      * =========================================================
      */
 
-    async function getProgressBar(t) {
+    async function getChecklistProgress(t) {
+
       const card =
         await t.card(
           "badges"
         );
 
-      const badges =
+      const cardBadges =
         card.badges || {};
 
-      const total =
-        badges.checkItems || 0;
+      return {
+        total:
+          cardBadges.checkItems || 0,
 
-      const completed =
-        badges.checkItemsChecked || 0;
+        completed:
+          cardBadges.checkItemsChecked || 0
+      };
+    }
 
-      if (total === 0) {
+
+    async function getProgressBar(t) {
+
+      const progress =
+        await getChecklistProgress(t);
+
+      if (progress.total === 0) {
         return "";
       }
 
       const filled =
         Math.round(
-          (completed / total) *
+          (
+            progress.completed /
+            progress.total
+          ) *
           TOTAL_PROGRESS_BLOCKS
         );
 
@@ -175,6 +193,22 @@
     }
 
 
+    async function hasIncompleteSteps(t) {
+
+      const progress =
+        await getChecklistProgress(t);
+
+      if (progress.total === 0) {
+        return false;
+      }
+
+      return (
+        progress.completed <
+        progress.total
+      );
+    }
+
+
     /*
      * =========================================================
      * OAUTH
@@ -182,20 +216,25 @@
      */
 
     async function getOAuthToken(t) {
+
       try {
+
         const oauth =
           t.getOAuth2ApiClient();
 
         return await oauth.getAccessToken();
 
       } catch (error) {
+
         return null;
       }
     }
 
 
     async function authorizeUser(t) {
+
       try {
+
         const oauth =
           t.getOAuth2ApiClient();
 
@@ -212,6 +251,7 @@
         });
 
       } catch (error) {
+
         console.error(
           "Authorization failed:",
           error
@@ -235,10 +275,12 @@
       t,
       company
     ) {
+
       const token =
         await getOAuthToken(t);
 
       if (!token) {
+
         throw new Error(
           "Please authorize NKTR Onboarding first"
         );
@@ -259,14 +301,17 @@
       const sourceCard =
         sourceCards.find(
           function(card) {
+
             return (
-              card.company === company
+              card.company ===
+              company
             );
           }
         );
 
 
       if (!sourceCard) {
+
         throw new Error(
           "Template not found for " +
           company
@@ -278,6 +323,7 @@
         !sourceCard.checklists ||
         sourceCard.checklists.length === 0
       ) {
+
         throw new Error(
           company +
           " template has no checklists"
@@ -295,6 +341,7 @@
         existing.checklists &&
         existing.checklists.length > 0
       ) {
+
         throw new Error(
           "This employee already has checklists"
         );
@@ -322,6 +369,7 @@
               method: "POST",
 
               headers: {
+
                 "Authorization":
                   "Bearer " + token,
 
@@ -333,6 +381,7 @@
 
 
         if (!response.ok) {
+
           throw new Error(
             "Checklist copy failed: " +
             response.status
@@ -352,6 +401,7 @@
       t,
       company
     ) {
+
       try {
 
         const existingCompany =
@@ -364,6 +414,7 @@
 
 
         if (existingCompany) {
+
           throw new Error(
             "Company already set to " +
             existingCompany
@@ -435,6 +486,7 @@
           function(source) {
 
             return {
+
               text:
                 source.company,
 
@@ -466,6 +518,10 @@
 
     window.TrelloPowerUp.initialize({
 
+      /*
+       * OPEN CARD
+       */
+
       "card-detail-badges":
         async function(t) {
 
@@ -483,12 +539,18 @@
           const badges = [];
 
 
+          /*
+           * Duplicate warning
+           */
+
           const duplicate =
             await isDuplicateCard(t);
 
 
           if (duplicate) {
+
             badges.push({
+
               title:
                 "Warning",
 
@@ -501,12 +563,18 @@
           }
 
 
+          /*
+           * Authorization
+           */
+
           const token =
             await getOAuthToken(t);
 
 
           if (!token) {
+
             badges.push({
+
               title:
                 "NKTR Access",
 
@@ -515,11 +583,16 @@
 
               callback:
                 function(t) {
+
                   return authorizeUser(t);
                 }
             });
           }
 
+
+          /*
+           * Company
+           */
 
           const company =
             await t.get(
@@ -533,6 +606,7 @@
           if (company) {
 
             badges.push({
+
               title:
                 "Company",
 
@@ -543,6 +617,7 @@
           } else {
 
             badges.push({
+
               title:
                 "Company",
 
@@ -564,6 +639,10 @@
         },
 
 
+      /*
+       * CLOSED CARD
+       */
+
       "card-badges":
         async function(t) {
 
@@ -578,11 +657,68 @@
           }
 
 
+          const list =
+            await t.list(
+              "name"
+            );
+
+
+          /*
+           * ==========================================
+           * FULLY OPERATIONAL
+           * ==========================================
+           *
+           * Clean card if complete.
+           * Only show warning when incomplete.
+           */
+
+          if (
+            list.name ===
+            FULLY_OPERATIONAL_LIST
+          ) {
+
+            return [{
+
+              dynamic:
+                async function() {
+
+                  const incomplete =
+                    await hasIncompleteSteps(
+                      t
+                    );
+
+
+                  return {
+
+                    text:
+                      incomplete
+                        ? "⚠ INCOMPLETE"
+                        : "",
+
+                    color:
+                      incomplete
+                        ? "red"
+                        : null,
+
+                    refresh:
+                      10
+                  };
+                }
+            }];
+          }
+
+
+          /*
+           * ==========================================
+           * NORMAL WORKFLOW CARDS
+           * ==========================================
+           */
+
           const badges = [];
 
 
           /*
-           * DUPLICATE
+           * Duplicate warning
            */
 
           badges.push({
@@ -597,6 +733,7 @@
 
 
                 return {
+
                   text:
                     duplicate
                       ? "⚠ DUPLICATE"
@@ -615,7 +752,7 @@
 
 
           /*
-           * PROGRESS
+           * Progress bar
            */
 
           badges.push({
@@ -630,6 +767,7 @@
 
 
                 return {
+
                   text:
                     progress,
 
@@ -641,7 +779,7 @@
 
 
           /*
-           * COMPANY
+           * Company
            */
 
           const company =
