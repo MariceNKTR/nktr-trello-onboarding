@@ -83,6 +83,23 @@ function isSourceCard(card) {
 }
 
 
+/* =========================================================
+   SEPARATOR CARDS
+   ========================================================= */
+
+function isSeparatorCard(card) {
+
+  const name =
+    (card && card.name)
+      ? card.name.trim()
+      : "";
+
+  return (
+    name.startsWith("──")
+  );
+}
+
+
 async function getSourceCards(t) {
 
   const cards = await t.cards(
@@ -203,17 +220,37 @@ async function isDuplicateCompanyTemplate(t) {
 
 
 /* =========================================================
-   DUPLICATE EMPLOYEE DETECTION
+   EMPLOYEE NAME NORMALIZATION
    ========================================================= */
 
 function normalizeName(name) {
 
   return (name || "")
-    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
     .replace(/\s+/g, " ");
 }
 
+
+function getNameParts(name) {
+
+  const normalized =
+    normalizeName(name);
+
+  if (!normalized) {
+    return [];
+  }
+
+  return normalized.split(" ");
+}
+
+
+/* =========================================================
+   EXACT DUPLICATE EMPLOYEE
+   ========================================================= */
 
 async function isDuplicateCard(t) {
 
@@ -223,7 +260,10 @@ async function isDuplicateCard(t) {
       "name"
     );
 
-  if (isSourceCard(currentCard)) {
+  if (
+    isSourceCard(currentCard) ||
+    isSeparatorCard(currentCard)
+  ) {
     return false;
   }
 
@@ -245,7 +285,10 @@ async function isDuplicateCard(t) {
   const matches =
     cards.filter(function(card) {
 
-      if (isSourceCard(card)) {
+      if (
+        isSourceCard(card) ||
+        isSeparatorCard(card)
+      ) {
         return false;
       }
 
@@ -256,6 +299,158 @@ async function isDuplicateCard(t) {
     });
 
   return matches.length > 1;
+}
+
+
+/* =========================================================
+   POSSIBLE DUPLICATE EMPLOYEE
+   ========================================================= */
+
+function namesPossiblyMatch(
+  firstName,
+  secondName
+) {
+
+  const firstParts =
+    getNameParts(firstName);
+
+  const secondParts =
+    getNameParts(secondName);
+
+
+  /*
+   * Require at least:
+   * First name + surname / initial
+   */
+
+  if (
+    firstParts.length < 2 ||
+    secondParts.length < 2
+  ) {
+    return false;
+  }
+
+
+  /*
+   * First names must match exactly.
+   */
+
+  if (
+    firstParts[0] !==
+    secondParts[0]
+  ) {
+    return false;
+  }
+
+
+  /*
+   * Exact full names are handled by
+   * MEDEWERKER DUBBEL instead.
+   */
+
+  if (
+    normalizeName(firstName) ===
+    normalizeName(secondName)
+  ) {
+    return false;
+  }
+
+
+  /*
+   * Compare everything after the first name.
+   *
+   * Examples:
+   * Roy S     ↔ Roy Sikk
+   * Roy Sik   ↔ Roy Sikk
+   *
+   * But:
+   * Roy de Vries ↔ Roy de Boer
+   * will NOT match.
+   */
+
+  const firstRest =
+    firstParts
+      .slice(1)
+      .join("");
+
+  const secondRest =
+    secondParts
+      .slice(1)
+      .join("");
+
+
+  if (
+    !firstRest ||
+    !secondRest
+  ) {
+    return false;
+  }
+
+
+  return (
+    firstRest.startsWith(
+      secondRest
+    ) ||
+    secondRest.startsWith(
+      firstRest
+    )
+  );
+}
+
+
+async function isPossibleDuplicateCard(t) {
+
+  const currentCard =
+    await t.card(
+      "id",
+      "name"
+    );
+
+  if (
+    isSourceCard(currentCard) ||
+    isSeparatorCard(currentCard)
+  ) {
+    return false;
+  }
+
+
+  /*
+   * Exact duplicate takes priority.
+   */
+
+  const exactDuplicate =
+    await isDuplicateCard(t);
+
+  if (exactDuplicate) {
+    return false;
+  }
+
+
+  const cards =
+    await t.cards(
+      "id",
+      "name"
+    );
+
+
+  return cards.some(
+    function(card) {
+
+      if (
+        card.id === currentCard.id ||
+        isSourceCard(card) ||
+        isSeparatorCard(card)
+      ) {
+        return false;
+      }
+
+
+      return namesPossiblyMatch(
+        currentCard.name,
+        card.name
+      );
+    }
+  );
 }
 
 
@@ -503,7 +698,10 @@ async function syncOperationalCover(t) {
         "cover"
       );
 
-    if (isSourceCard(card)) {
+    if (
+      isSourceCard(card) ||
+      isSeparatorCard(card)
+    ) {
       return;
     }
 
@@ -614,11 +812,6 @@ async function copyCompanyChecklists(
     );
 
 
-  /*
-   * Do not arbitrarily choose between
-   * duplicate company templates.
-   */
-
   if (matchingSources.length > 1) {
 
     throw new Error(
@@ -639,12 +832,6 @@ async function copyCompanyChecklists(
     );
   }
 
-
-  /*
-   * Extra safety:
-   * company may have become inactive
-   * after the menu was opened.
-   */
 
   if (sourceCard.inactive) {
 
@@ -799,11 +986,6 @@ async function openCompanySelector(t) {
     await getSourceCards(t);
 
 
-  /*
-   * Inactive templates remain valid source cards,
-   * but are not available for new employees.
-   */
-
   const activeSourceCards =
     sourceCards.filter(
       function(source) {
@@ -824,11 +1006,6 @@ async function openCompanySelector(t) {
     });
   }
 
-
-  /*
-   * Each active company appears only once,
-   * even when duplicate source cards exist.
-   */
 
   const uniqueCompanies =
     new Map();
@@ -917,6 +1094,15 @@ window.TrelloPowerUp.initialize({
 
 
       /*
+       * SEPARATOR
+       */
+
+      if (isSeparatorCard(card)) {
+        return [];
+      }
+
+
+      /*
        * TEMPLATE CARD
        */
 
@@ -995,6 +1181,29 @@ window.TrelloPowerUp.initialize({
           color:
             "red"
         });
+
+      } else {
+
+        const possibleDuplicate =
+          await isPossibleDuplicateCard(
+            t
+          );
+
+
+        if (possibleDuplicate) {
+
+          badges.push({
+
+            title:
+              "Waarschuwing",
+
+            text:
+              "Mogelijk dubbel",
+
+            color:
+              "yellow"
+          });
+        }
       }
 
 
@@ -1086,6 +1295,15 @@ window.TrelloPowerUp.initialize({
         await t.card(
           "name"
         );
+
+
+      /*
+       * SEPARATOR
+       */
+
+      if (isSeparatorCard(card)) {
+        return [];
+      }
 
 
       /*
@@ -1224,16 +1442,38 @@ window.TrelloPowerUp.initialize({
               );
 
 
+            if (duplicate) {
+
+              return {
+
+                text:
+                  "⚠ MEDEWERKER DUBBEL",
+
+                color:
+                  "red",
+
+                refresh:
+                  10
+              };
+            }
+
+
+            const possibleDuplicate =
+              await isPossibleDuplicateCard(
+                t
+              );
+
+
             return {
 
               text:
-                duplicate
-                  ? "⚠ MEDEWERKER DUBBEL"
+                possibleDuplicate
+                  ? "⚠ MOGELIJK DUBBEL"
                   : "",
 
               color:
-                duplicate
-                  ? "red"
+                possibleDuplicate
+                  ? "yellow"
                   : null,
 
               refresh:
