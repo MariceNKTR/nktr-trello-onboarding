@@ -6,814 +6,853 @@
 </head>
 
 <body>
-  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+<script src="https://p.trellocdn.com/power-up.min.js"></script>
 
-  <script>
-    const CLIENT_ID = "VGpJ9UId4pH0TheoJUoTuVczLidyM3IQ";
+<script>
+const CLIENT_ID = "VGpJ9UId4pH0TheoJUoTuVczLidyM3IQ";
 
-    const REDIRECT_URI =
-      "https://maricenktr.github.io/nktr-trello-onboarding/oauth-callback.html";
+const REDIRECT_URI =
+  "https://maricenktr.github.io/nktr-trello-onboarding/oauth-callback.html";
 
-    const TOTAL_PROGRESS_BLOCKS = 10;
-    const FULLY_OPERATIONAL_LIST = "Fully Operational";
+const TOTAL_PROGRESS_BLOCKS = 10;
+const FULLY_OPERATIONAL_LIST = "Fully Operational";
 
 
-    /*
-     * =========================================================
-     * SOURCE CARD DETECTION
-     * =========================================================
-     */
+/* =========================================================
+   SOURCE CARD DETECTION
+   ========================================================= */
 
-    function getCompanyFromSourceCardName(name) {
-      const match = (name || "").match(
-        /^🔒︎\s*ONB\s*\|\s*(.+?)\s*\|\s*Stappenbron$/i
-      );
+function getCompanyFromSourceCardName(name) {
+  const match = (name || "").match(
+    /^🔒︎\s*ONB\s*\|\s*(.+?)\s*\|\s*Stappenbron$/i
+  );
 
-      if (!match) {
+  if (!match) {
+    return null;
+  }
+
+  return match[1].trim();
+}
+
+
+function isSourceCard(card) {
+  return !!getCompanyFromSourceCardName(
+    card.name
+  );
+}
+
+
+async function getSourceCards(t) {
+  const cards = await t.cards(
+    "id",
+    "name",
+    "checklists"
+  );
+
+  return cards
+    .map(function(card) {
+
+      const company =
+        getCompanyFromSourceCardName(
+          card.name
+        );
+
+      if (!company) {
         return null;
       }
 
-      return match[1].trim();
+      return {
+        id: card.id,
+        name: card.name,
+        company: company,
+        checklists:
+          card.checklists || []
+      };
+    })
+    .filter(Boolean)
+    .sort(function(a, b) {
+
+      return a.company.localeCompare(
+        b.company
+      );
+    });
+}
+
+
+/* =========================================================
+   TEMPLATE HEALTH
+   ========================================================= */
+
+async function isTemplateEmpty(t) {
+  const result =
+    await t.card("checklists");
+
+  const checklists =
+    result.checklists || [];
+
+  return checklists.length === 0;
+}
+
+
+/* =========================================================
+   DUPLICATE DETECTION
+   ========================================================= */
+
+function normalizeName(name) {
+  return (name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+
+async function isDuplicateCard(t) {
+
+  const currentCard =
+    await t.card(
+      "id",
+      "name"
+    );
+
+  if (isSourceCard(currentCard)) {
+    return false;
+  }
+
+  const cards =
+    await t.cards(
+      "id",
+      "name"
+    );
+
+  const currentName =
+    normalizeName(
+      currentCard.name
+    );
+
+  if (!currentName) {
+    return false;
+  }
+
+  const matches =
+    cards.filter(function(card) {
+
+      if (isSourceCard(card)) {
+        return false;
+      }
+
+      return (
+        normalizeName(card.name) ===
+        currentName
+      );
+    });
+
+  return matches.length > 1;
+}
+
+
+/* =========================================================
+   CHECKLIST PROGRESS
+   ========================================================= */
+
+async function getChecklistProgress(t) {
+
+  const card =
+    await t.card(
+      "badges"
+    );
+
+  const cardBadges =
+    card.badges || {};
+
+  return {
+    total:
+      cardBadges.checkItems || 0,
+
+    completed:
+      cardBadges.checkItemsChecked || 0
+  };
+}
+
+
+async function getProgressBar(t) {
+
+  const progress =
+    await getChecklistProgress(t);
+
+  if (progress.total === 0) {
+    return "";
+  }
+
+  const filled =
+    Math.round(
+      (
+        progress.completed /
+        progress.total
+      ) *
+      TOTAL_PROGRESS_BLOCKS
+    );
+
+  return (
+    "█".repeat(filled) +
+    "░".repeat(
+      TOTAL_PROGRESS_BLOCKS -
+      filled
+    )
+  );
+}
+
+
+async function hasIncompleteSteps(t) {
+
+  const progress =
+    await getChecklistProgress(t);
+
+  if (progress.total === 0) {
+    return false;
+  }
+
+  return (
+    progress.completed <
+    progress.total
+  );
+}
+
+
+/* =========================================================
+   OAUTH
+   ========================================================= */
+
+async function getOAuthToken(t) {
+
+  try {
+
+    const oauth =
+      t.getOAuth2ApiClient();
+
+    return await oauth.getAccessToken();
+
+  } catch (error) {
+
+    return null;
+  }
+}
+
+
+async function authorizeUser(t) {
+
+  try {
+
+    const oauth =
+      t.getOAuth2ApiClient();
+
+    await oauth.authorize({
+      scopes: [
+        "read:board:trello",
+        "write:board:trello"
+      ]
+    });
+
+    await t.alert({
+      message:
+        "NKTR Onboarding authorized"
+    });
+
+  } catch (error) {
+
+    console.error(
+      "Authorization failed:",
+      error
+    );
+
+    await t.alert({
+      message:
+        "Authorization failed"
+    });
+  }
+}
+
+
+/* =========================================================
+   COPY COMPANY CHECKLISTS
+   ========================================================= */
+
+async function copyCompanyChecklists(
+  t,
+  company
+) {
+
+  const token =
+    await getOAuthToken(t);
+
+  if (!token) {
+
+    throw new Error(
+      "Please authorize NKTR Onboarding first"
+    );
+  }
+
+
+  const currentCard =
+    await t.card(
+      "id",
+      "name"
+    );
+
+
+  const sourceCards =
+    await getSourceCards(t);
+
+
+  const sourceCard =
+    sourceCards.find(
+      function(card) {
+
+        return (
+          card.company ===
+          company
+        );
+      }
+    );
+
+
+  if (!sourceCard) {
+
+    throw new Error(
+      "Template not found for " +
+      company
+    );
+  }
+
+
+  if (
+    !sourceCard.checklists ||
+    sourceCard.checklists.length === 0
+  ) {
+
+    throw new Error(
+      company +
+      " template has no checklists"
+    );
+  }
+
+
+  const existing =
+    await t.card(
+      "checklists"
+    );
+
+
+  if (
+    existing.checklists &&
+    existing.checklists.length > 0
+  ) {
+
+    throw new Error(
+      "This employee already has checklists"
+    );
+  }
+
+
+  for (
+    const checklist
+    of sourceCard.checklists
+  ) {
+
+    const url =
+      "https://api.trello.com/1/cards/" +
+      currentCard.id +
+      "/checklists?idChecklistSource=" +
+      encodeURIComponent(
+        checklist.id
+      );
+
+
+    const response =
+      await fetch(
+        url,
+        {
+          method: "POST",
+
+          headers: {
+
+            "Authorization":
+              "Bearer " + token,
+
+            "Accept":
+              "application/json"
+          }
+        }
+      );
+
+
+    if (!response.ok) {
+
+      throw new Error(
+        "Checklist copy failed: " +
+        response.status
+      );
     }
+  }
+}
 
 
-    function isSourceCard(card) {
-      return !!getCompanyFromSourceCardName(
-        card.name
+/* =========================================================
+   COMPANY SELECTION
+   ========================================================= */
+
+async function chooseCompany(
+  t,
+  company
+) {
+
+  try {
+
+    const existingCompany =
+      await t.get(
+        "card",
+        "shared",
+        "company",
+        null
+      );
+
+
+    if (existingCompany) {
+
+      throw new Error(
+        "Company already set to " +
+        existingCompany
       );
     }
 
 
-    async function getSourceCards(t) {
-      const cards = await t.cards(
-        "id",
-        "name",
-        "checklists"
-      );
-
-      return cards
-        .map(function(card) {
-
-          const company =
-            getCompanyFromSourceCardName(
-              card.name
-            );
-
-          if (!company) {
-            return null;
-          }
-
-          return {
-            id: card.id,
-            name: card.name,
-            company: company,
-            checklists:
-              card.checklists || []
-          };
-        })
-        .filter(Boolean)
-        .sort(function(a, b) {
-
-          return a.company.localeCompare(
-            b.company
-          );
-        });
-    }
+    await copyCompanyChecklists(
+      t,
+      company
+    );
 
 
-    /*
-     * =========================================================
-     * DUPLICATE DETECTION
-     * =========================================================
-     */
-
-    function normalizeName(name) {
-      return (name || "")
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, " ");
-    }
+    await t.set(
+      "card",
+      "shared",
+      "company",
+      company
+    );
 
 
-    async function isDuplicateCard(t) {
+    await t.closePopup();
 
-      const currentCard =
-        await t.card(
-          "id",
-          "name"
-        );
 
-      if (isSourceCard(currentCard)) {
-        return false;
+    await t.alert({
+      message:
+        company +
+        " onboarding loaded"
+    });
+
+
+  } catch (error) {
+
+    console.error(error);
+
+    await t.alert({
+      message:
+        error.message
+    });
+  }
+}
+
+
+/* =========================================================
+   DYNAMIC COMPANY MENU
+   ========================================================= */
+
+async function openCompanySelector(t) {
+
+  const sourceCards =
+    await getSourceCards(t);
+
+
+  if (
+    sourceCards.length === 0
+  ) {
+
+    return t.alert({
+      message:
+        "No onboarding templates found"
+    });
+  }
+
+
+  const items =
+    sourceCards.map(
+      function(source) {
+
+        return {
+
+          text:
+            source.company,
+
+          callback:
+            function(t) {
+
+              return chooseCompany(
+                t,
+                source.company
+              );
+            }
+        };
       }
-
-      const cards =
-        await t.cards(
-          "id",
-          "name"
-        );
-
-      const currentName =
-        normalizeName(
-          currentCard.name
-        );
-
-      if (!currentName) {
-        return false;
-      }
-
-      const matches =
-        cards.filter(function(card) {
-
-          if (isSourceCard(card)) {
-            return false;
-          }
-
-          return (
-            normalizeName(card.name) ===
-            currentName
-          );
-        });
-
-      return matches.length > 1;
-    }
+    );
 
 
-    /*
-     * =========================================================
-     * CHECKLIST PROGRESS
-     * =========================================================
-     */
+  return t.popup({
+    title: "Select company",
+    items: items
+  });
+}
 
-    async function getChecklistProgress(t) {
+
+/* =========================================================
+   POWER-UP
+   ========================================================= */
+
+window.TrelloPowerUp.initialize({
+
+  /* -------------------------------------------------------
+     OPEN CARD
+     ------------------------------------------------------- */
+
+  "card-detail-badges":
+    async function(t) {
 
       const card =
         await t.card(
-          "badges"
+          "name"
         );
 
-      const cardBadges =
-        card.badges || {};
 
-      return {
-        total:
-          cardBadges.checkItems || 0,
+      /*
+       * SOURCE TEMPLATE CARD
+       */
 
-        completed:
-          cardBadges.checkItemsChecked || 0
-      };
-    }
+      if (isSourceCard(card)) {
 
+        const empty =
+          await isTemplateEmpty(t);
 
-    async function getProgressBar(t) {
+        if (empty) {
 
-      const progress =
-        await getChecklistProgress(t);
+          return [{
+            title:
+              "Waarschuwing",
 
-      if (progress.total === 0) {
-        return "";
+            text:
+              "Sjabloon leeg",
+
+            color:
+              "red"
+          }];
+        }
+
+        return [];
       }
 
-      const filled =
-        Math.round(
-          (
-            progress.completed /
-            progress.total
-          ) *
-          TOTAL_PROGRESS_BLOCKS
-        );
 
-      return (
-        "█".repeat(filled) +
-        "░".repeat(
-          TOTAL_PROGRESS_BLOCKS -
-          filled
-        )
-      );
-    }
+      const badges = [];
 
 
-    async function hasIncompleteSteps(t) {
+      /*
+       * DUPLICATE WARNING
+       */
 
-      const progress =
-        await getChecklistProgress(t);
-
-      if (progress.total === 0) {
-        return false;
-      }
-
-      return (
-        progress.completed <
-        progress.total
-      );
-    }
+      const duplicate =
+        await isDuplicateCard(t);
 
 
-    /*
-     * =========================================================
-     * OAUTH
-     * =========================================================
-     */
+      if (duplicate) {
 
-    async function getOAuthToken(t) {
+        badges.push({
 
-      try {
+          title:
+            "Warning",
 
-        const oauth =
-          t.getOAuth2ApiClient();
+          text:
+            "Duplicate employee name",
 
-        return await oauth.getAccessToken();
-
-      } catch (error) {
-
-        return null;
-      }
-    }
-
-
-    async function authorizeUser(t) {
-
-      try {
-
-        const oauth =
-          t.getOAuth2ApiClient();
-
-        await oauth.authorize({
-          scopes: [
-            "read:board:trello",
-            "write:board:trello"
-          ]
-        });
-
-        await t.alert({
-          message:
-            "NKTR Onboarding authorized"
-        });
-
-      } catch (error) {
-
-        console.error(
-          "Authorization failed:",
-          error
-        );
-
-        await t.alert({
-          message:
-            "Authorization failed"
+          color:
+            "red"
         });
       }
-    }
 
 
-    /*
-     * =========================================================
-     * COPY COMPANY CHECKLISTS
-     * =========================================================
-     */
-
-    async function copyCompanyChecklists(
-      t,
-      company
-    ) {
+      /*
+       * AUTHORIZATION
+       */
 
       const token =
         await getOAuthToken(t);
 
+
       if (!token) {
 
-        throw new Error(
-          "Please authorize NKTR Onboarding first"
-        );
+        badges.push({
+
+          title:
+            "NKTR Access",
+
+          text:
+            "Authorize",
+
+          callback:
+            function(t) {
+
+              return authorizeUser(t);
+            }
+        });
       }
 
 
-      const currentCard =
+      /*
+       * COMPANY
+       */
+
+      const company =
+        await t.get(
+          "card",
+          "shared",
+          "company",
+          null
+        );
+
+
+      if (company) {
+
+        badges.push({
+
+          title:
+            "Company",
+
+          text:
+            company
+        });
+
+      } else {
+
+        badges.push({
+
+          title:
+            "Company",
+
+          text:
+            "Set company",
+
+          callback:
+            function(t) {
+
+              return openCompanySelector(
+                t
+              );
+            }
+        });
+      }
+
+
+      return badges;
+    },
+
+
+  /* -------------------------------------------------------
+     CLOSED CARD
+     ------------------------------------------------------- */
+
+  "card-badges":
+    async function(t) {
+
+      const card =
         await t.card(
-          "id",
           "name"
         );
 
 
-      const sourceCards =
-        await getSourceCards(t);
+      /*
+       * SOURCE TEMPLATE CARD
+       */
 
+      if (isSourceCard(card)) {
 
-      const sourceCard =
-        sourceCards.find(
-          function(card) {
+        return [{
 
-            return (
-              card.company ===
-              company
-            );
-          }
-        );
+          dynamic:
+            async function() {
 
+              const empty =
+                await isTemplateEmpty(t);
 
-      if (!sourceCard) {
+              return {
 
-        throw new Error(
-          "Template not found for " +
-          company
-        );
-      }
+                text:
+                  empty
+                    ? "⚠ SJABLOON LEEG"
+                    : "",
 
+                color:
+                  empty
+                    ? "red"
+                    : null,
 
-      if (
-        !sourceCard.checklists ||
-        sourceCard.checklists.length === 0
-      ) {
-
-        throw new Error(
-          company +
-          " template has no checklists"
-        );
-      }
-
-
-      const existing =
-        await t.card(
-          "checklists"
-        );
-
-
-      if (
-        existing.checklists &&
-        existing.checklists.length > 0
-      ) {
-
-        throw new Error(
-          "This employee already has checklists"
-        );
-      }
-
-
-      for (
-        const checklist
-        of sourceCard.checklists
-      ) {
-
-        const url =
-          "https://api.trello.com/1/cards/" +
-          currentCard.id +
-          "/checklists?idChecklistSource=" +
-          encodeURIComponent(
-            checklist.id
-          );
-
-
-        const response =
-          await fetch(
-            url,
-            {
-              method: "POST",
-
-              headers: {
-
-                "Authorization":
-                  "Bearer " + token,
-
-                "Accept":
-                  "application/json"
-              }
+                refresh:
+                  10
+              };
             }
-          );
-
-
-        if (!response.ok) {
-
-          throw new Error(
-            "Checklist copy failed: " +
-            response.status
-          );
-        }
+        }];
       }
-    }
 
 
-    /*
-     * =========================================================
-     * COMPANY SELECTION
-     * =========================================================
-     */
-
-    async function chooseCompany(
-      t,
-      company
-    ) {
-
-      try {
-
-        const existingCompany =
-          await t.get(
-            "card",
-            "shared",
-            "company",
-            null
-          );
-
-
-        if (existingCompany) {
-
-          throw new Error(
-            "Company already set to " +
-            existingCompany
-          );
-        }
-
-
-        await copyCompanyChecklists(
-          t,
-          company
+      const list =
+        await t.list(
+          "name"
         );
 
 
-        await t.set(
-          "card",
-          "shared",
-          "company",
-          company
-        );
-
-
-        await t.closePopup();
-
-
-        await t.alert({
-          message:
-            company +
-            " onboarding loaded"
-        });
-
-
-      } catch (error) {
-
-        console.error(error);
-
-        await t.alert({
-          message:
-            error.message
-        });
-      }
-    }
-
-
-    /*
-     * =========================================================
-     * DYNAMIC COMPANY MENU
-     * =========================================================
-     */
-
-    async function openCompanySelector(t) {
-
-      const sourceCards =
-        await getSourceCards(t);
-
+      /*
+       * FULLY OPERATIONAL
+       */
 
       if (
-        sourceCards.length === 0
+        list.name ===
+        FULLY_OPERATIONAL_LIST
       ) {
 
-        return t.alert({
-          message:
-            "No onboarding templates found"
-        });
+        return [{
+
+          dynamic:
+            async function() {
+
+              const incomplete =
+                await hasIncompleteSteps(
+                  t
+                );
+
+              return {
+
+                text:
+                  incomplete
+                    ? "⚠ INCOMPLETE"
+                    : "",
+
+                color:
+                  incomplete
+                    ? "red"
+                    : null,
+
+                refresh:
+                  10
+              };
+            }
+        }];
       }
 
 
-      const items =
-        sourceCards.map(
-          function(source) {
+      /*
+       * NORMAL EMPLOYEE CARD
+       */
+
+      const badges = [];
+
+
+      /*
+       * DUPLICATE
+       */
+
+      badges.push({
+
+        dynamic:
+          async function() {
+
+            const duplicate =
+              await isDuplicateCard(
+                t
+              );
 
             return {
 
               text:
-                source.company,
+                duplicate
+                  ? "⚠ DUPLICATE"
+                  : "",
 
-              callback:
-                function(t) {
+              color:
+                duplicate
+                  ? "red"
+                  : null,
 
-                  return chooseCompany(
-                    t,
-                    source.company
-                  );
-                }
+              refresh:
+                10
             };
           }
+      });
+
+
+      /*
+       * PROGRESS
+       */
+
+      badges.push({
+
+        dynamic:
+          async function() {
+
+            const progress =
+              await getProgressBar(
+                t
+              );
+
+            return {
+
+              text:
+                progress,
+
+              refresh:
+                10
+            };
+          }
+      });
+
+
+      /*
+       * COMPANY
+       */
+
+      const company =
+        await t.get(
+          "card",
+          "shared",
+          "company",
+          null
         );
 
 
-      return t.popup({
-        title: "Select company",
-        items: items
-      });
+      if (company) {
+
+        badges.push({
+          text:
+            company
+        });
+      }
+
+
+      return badges;
     }
 
 
-    /*
-     * =========================================================
-     * POWER-UP
-     * =========================================================
-     */
+}, {
 
-    window.TrelloPowerUp.initialize({
+  clientId:
+    CLIENT_ID,
 
-      /*
-       * OPEN CARD
-       */
+  redirectUri:
+    REDIRECT_URI
 
-      "card-detail-badges":
-        async function(t) {
-
-          const card =
-            await t.card(
-              "name"
-            );
-
-
-          if (isSourceCard(card)) {
-            return [];
-          }
-
-
-          const badges = [];
-
-
-          /*
-           * Duplicate warning
-           */
-
-          const duplicate =
-            await isDuplicateCard(t);
-
-
-          if (duplicate) {
-
-            badges.push({
-
-              title:
-                "Warning",
-
-              text:
-                "Duplicate employee name",
-
-              color:
-                "red"
-            });
-          }
-
-
-          /*
-           * Authorization
-           */
-
-          const token =
-            await getOAuthToken(t);
-
-
-          if (!token) {
-
-            badges.push({
-
-              title:
-                "NKTR Access",
-
-              text:
-                "Authorize",
-
-              callback:
-                function(t) {
-
-                  return authorizeUser(t);
-                }
-            });
-          }
-
-
-          /*
-           * Company
-           */
-
-          const company =
-            await t.get(
-              "card",
-              "shared",
-              "company",
-              null
-            );
-
-
-          if (company) {
-
-            badges.push({
-
-              title:
-                "Company",
-
-              text:
-                company
-            });
-
-          } else {
-
-            badges.push({
-
-              title:
-                "Company",
-
-              text:
-                "Set company",
-
-              callback:
-                function(t) {
-
-                  return openCompanySelector(
-                    t
-                  );
-                }
-            });
-          }
-
-
-          return badges;
-        },
-
-
-      /*
-       * CLOSED CARD
-       */
-
-      "card-badges":
-        async function(t) {
-
-          const card =
-            await t.card(
-              "name"
-            );
-
-
-          if (isSourceCard(card)) {
-            return [];
-          }
-
-
-          const list =
-            await t.list(
-              "name"
-            );
-
-
-          /*
-           * ==========================================
-           * FULLY OPERATIONAL
-           * ==========================================
-           *
-           * Clean card if complete.
-           * Only show warning when incomplete.
-           */
-
-          if (
-            list.name ===
-            FULLY_OPERATIONAL_LIST
-          ) {
-
-            return [{
-
-              dynamic:
-                async function() {
-
-                  const incomplete =
-                    await hasIncompleteSteps(
-                      t
-                    );
-
-
-                  return {
-
-                    text:
-                      incomplete
-                        ? "⚠ INCOMPLETE"
-                        : "",
-
-                    color:
-                      incomplete
-                        ? "red"
-                        : null,
-
-                    refresh:
-                      10
-                  };
-                }
-            }];
-          }
-
-
-          /*
-           * ==========================================
-           * NORMAL WORKFLOW CARDS
-           * ==========================================
-           */
-
-          const badges = [];
-
-
-          /*
-           * Duplicate warning
-           */
-
-          badges.push({
-
-            dynamic:
-              async function() {
-
-                const duplicate =
-                  await isDuplicateCard(
-                    t
-                  );
-
-
-                return {
-
-                  text:
-                    duplicate
-                      ? "⚠ DUPLICATE"
-                      : "",
-
-                  color:
-                    duplicate
-                      ? "red"
-                      : null,
-
-                  refresh:
-                    10
-                };
-              }
-          });
-
-
-          /*
-           * Progress bar
-           */
-
-          badges.push({
-
-            dynamic:
-              async function() {
-
-                const progress =
-                  await getProgressBar(
-                    t
-                  );
-
-
-                return {
-
-                  text:
-                    progress,
-
-                  refresh:
-                    10
-                };
-              }
-          });
-
-
-          /*
-           * Company
-           */
-
-          const company =
-            await t.get(
-              "card",
-              "shared",
-              "company",
-              null
-            );
-
-
-          if (company) {
-
-            badges.push({
-              text:
-                company
-            });
-          }
-
-
-          return badges;
-        }
-
-
-    }, {
-
-      clientId:
-        CLIENT_ID,
-
-      redirectUri:
-        REDIRECT_URI
-
-    });
-
-  </script>
+});
+</script>
 </body>
 </html>
