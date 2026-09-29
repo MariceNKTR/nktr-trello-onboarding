@@ -14,20 +14,80 @@
     const REDIRECT_URI =
       "https://maricenktr.github.io/nktr-trello-onboarding/oauth-callback.html";
 
-    const SOURCE_CARDS = {
-      "ASS": "🔒︎ ONB | ASS | Stappenbron",
-      "BMS": "🔒︎ ONB | BMS | Stappenbron",
-      "BMS AMS": "🔒︎ ONB | BMS AMS | Stappenbron",
-      "COVA": "🔒︎ ONB | COVA | Stappenbron"
-    };
 
-    const FULLY_OPERATIONAL_LIST = "Fully Operational";
+    /*
+     * =========================================================
+     * SOURCE CARD DETECTION
+     * =========================================================
+     *
+     * Required naming structure:
+     *
+     * 🔒︎ ONB | COMPANY | Stappenbron
+     *
+     * Example:
+     * 🔒︎ ONB | BMS | Stappenbron
+     */
+
+    function getCompanyFromSourceCardName(name) {
+      const match = (name || "").match(
+        /^🔒︎\s*ONB\s*\|\s*(.+?)\s*\|\s*Stappenbron$/i
+      );
+
+      if (!match) {
+        return null;
+      }
+
+      return match[1].trim();
+    }
 
 
     function isSourceCard(card) {
-      return card.name.includes("Stappenbron");
+      return !!getCompanyFromSourceCardName(
+        card.name
+      );
     }
 
+
+    async function getSourceCards(t) {
+      const cards = await t.cards(
+        "id",
+        "name",
+        "checklists"
+      );
+
+      return cards
+        .map(function(card) {
+          const company =
+            getCompanyFromSourceCardName(
+              card.name
+            );
+
+          if (!company) {
+            return null;
+          }
+
+          return {
+            id: card.id,
+            name: card.name,
+            company: company,
+            checklists:
+              card.checklists || []
+          };
+        })
+        .filter(Boolean)
+        .sort(function(a, b) {
+          return a.company.localeCompare(
+            b.company
+          );
+        });
+    }
+
+
+    /*
+     * =========================================================
+     * DUPLICATE EMPLOYEE DETECTION
+     * =========================================================
+     */
 
     function normalizeName(name) {
       return (name || "")
@@ -38,262 +98,212 @@
 
 
     async function isDuplicateCard(t) {
-      const currentCard = await t.card("id", "name");
-      const cards = await t.cards("id", "name");
+      const currentCard =
+        await t.card(
+          "id",
+          "name"
+        );
 
       if (isSourceCard(currentCard)) {
         return false;
       }
 
-      const currentName = normalizeName(currentCard.name);
+      const cards =
+        await t.cards(
+          "id",
+          "name"
+        );
+
+      const currentName =
+        normalizeName(
+          currentCard.name
+        );
 
       if (!currentName) {
         return false;
       }
 
-      const matches = cards.filter(function(card) {
-        return (
-          !isSourceCard(card) &&
-          normalizeName(card.name) === currentName
-        );
-      });
+      const matches =
+        cards.filter(function(card) {
+
+          if (isSourceCard(card)) {
+            return false;
+          }
+
+          return (
+            normalizeName(card.name) ===
+            currentName
+          );
+        });
 
       return matches.length > 1;
     }
 
 
+    /*
+     * =========================================================
+     * OAUTH
+     * =========================================================
+     */
+
     async function getOAuthToken(t) {
       try {
-        const oauth = t.getOAuth2ApiClient();
+        const oauth =
+          t.getOAuth2ApiClient();
+
         return await oauth.getAccessToken();
+
       } catch (error) {
         return null;
       }
     }
 
 
-    async function setGreenCover(token, cardId) {
-      const response = await fetch(
-        "https://api.trello.com/1/cards/" + cardId,
-        {
-          method: "PUT",
+    async function authorizeUser(t) {
+      try {
+        const oauth =
+          t.getOAuth2ApiClient();
 
-          headers: {
-            "Authorization": "Bearer " + token,
-            "Accept": "application/json",
-            "Content-Type": "application/json"
-          },
+        await oauth.authorize({
+          scopes: [
+            "read:board:trello",
+            "write:board:trello"
+          ]
+        });
 
-          body: JSON.stringify({
-            cover: {
-              color: "green",
-              size: "full",
-              brightness: "dark"
-            }
-          })
-        }
-      );
+        await t.alert({
+          message:
+            "NKTR Onboarding authorized"
+        });
 
-      if (!response.ok) {
-        throw new Error(
-          "Green cover failed: " + response.status
+      } catch (error) {
+        console.error(
+          "Authorization failed:",
+          error
         );
-      }
 
-      return response.json();
+        await t.alert({
+          message:
+            "Authorization failed"
+        });
+      }
     }
 
 
     /*
-     * IMPORTANT:
-     * Remove cover using an EMPTY cover query parameter.
-     * This is deliberately different from our previous attempts.
+     * =========================================================
+     * COPY CHECKLISTS FROM SOURCE CARD
+     * =========================================================
      */
-    async function removeCardCover(token, cardId) {
 
-      const response = await fetch(
-        "https://api.trello.com/1/cards/" +
-        cardId +
-        "?cover=",
-        {
-          method: "PUT",
-
-          headers: {
-            "Authorization": "Bearer " + token,
-            "Accept": "application/json"
-          }
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          "Cover removal failed: " +
-          response.status
-        );
-      }
-
-      return response.json();
-    }
-
-
-    async function syncOperationalCover(t) {
-      try {
-
-        const card = await t.card(
-          "id",
-          "name",
-          "cover"
-        );
-
-        if (isSourceCard(card)) {
-          return;
-        }
-
-        const list = await t.list("name");
-
-        const shouldBeGreen =
-          list.name === FULLY_OPERATIONAL_LIST;
-
-        const applied = await t.get(
-          "card",
-          "shared",
-          "operationalGreenApplied",
-          false
-        );
-
-        const isGreen =
-          card.cover &&
-          card.cover.color === "green";
-
-        const token = await getOAuthToken(t);
-
-        if (!token) {
-          return;
-        }
-
-
-        /*
-         * CARD IS IN FULLY OPERATIONAL
-         */
-        if (shouldBeGreen) {
-
-          if (!isGreen) {
-            await setGreenCover(
-              token,
-              card.id
-            );
-          }
-
-          await t.set(
-            "card",
-            "shared",
-            "operationalGreenApplied",
-            true
-          );
-
-          return;
-        }
-
-
-        /*
-         * CARD IS OUTSIDE FULLY OPERATIONAL
-         */
-        if (!shouldBeGreen && (applied || isGreen)) {
-
-          await removeCardCover(
-            token,
-            card.id
-          );
-
-          /*
-           * Only mark false AFTER Trello confirms
-           * successful removal.
-           */
-          await t.set(
-            "card",
-            "shared",
-            "operationalGreenApplied",
-            false
-          );
-        }
-
-      } catch (error) {
-
-        console.error(
-          "Operational cover sync failed:",
-          error
-        );
-      }
-    }
-
-
-    async function copyCompanyChecklists(t, company) {
-
-      const oauth = t.getOAuth2ApiClient();
-      const token = await oauth.getAccessToken();
+    async function copyCompanyChecklists(
+      t,
+      company
+    ) {
+      const token =
+        await getOAuthToken(t);
 
       if (!token) {
-        throw new Error("Not authorized");
+        throw new Error(
+          "Please authorize NKTR Onboarding first"
+        );
       }
 
-      const currentCard =
-        await t.card("id", "name");
 
-      const cards =
-        await t.cards(
+      const currentCard =
+        await t.card(
           "id",
-          "name",
-          "checklists"
+          "name"
         );
 
-      const sourceName =
-        SOURCE_CARDS[company];
+
+      const sourceCards =
+        await getSourceCards(t);
+
 
       const sourceCard =
-        cards.find(function(card) {
-          return card.name === sourceName;
-        });
+        sourceCards.find(
+          function(card) {
+            return (
+              card.company === company
+            );
+          }
+        );
+
 
       if (!sourceCard) {
         throw new Error(
-          "Source card not found: " +
-          sourceName
+          "Template not found for " +
+          company
         );
       }
 
+
+      if (
+        !sourceCard.checklists ||
+        sourceCard.checklists.length === 0
+      ) {
+        throw new Error(
+          company +
+          " template has no checklists"
+        );
+      }
+
+
       const existing =
-        await t.card("checklists");
+        await t.card(
+          "checklists"
+        );
+
 
       if (
         existing.checklists &&
         existing.checklists.length > 0
       ) {
         throw new Error(
-          "This card already contains checklists"
+          "This employee already has checklists"
         );
       }
 
 
-      for (const checklist of sourceCard.checklists) {
+      /*
+       * Copy every checklist found on the
+       * source card.
+       *
+       * Therefore FASE 4, FASE 5, etc.
+       * automatically work in the future.
+       */
+
+      for (
+        const checklist
+        of sourceCard.checklists
+      ) {
 
         const url =
           "https://api.trello.com/1/cards/" +
           currentCard.id +
           "/checklists?idChecklistSource=" +
-          encodeURIComponent(checklist.id);
+          encodeURIComponent(
+            checklist.id
+          );
+
 
         const response =
-          await fetch(url, {
-            method: "POST",
+          await fetch(
+            url,
+            {
+              method: "POST",
 
-            headers: {
-              "Authorization":
-                "Bearer " + token,
+              headers: {
+                "Authorization":
+                  "Bearer " + token,
 
-              "Accept":
-                "application/json"
+                "Accept":
+                  "application/json"
+              }
             }
-          });
+          );
+
 
         if (!response.ok) {
           throw new Error(
@@ -305,14 +315,44 @@
     }
 
 
-    async function chooseCompany(t, company) {
+    /*
+     * =========================================================
+     * COMPANY SELECTION
+     * =========================================================
+     */
 
+    async function chooseCompany(
+      t,
+      company
+    ) {
       try {
+
+        /*
+         * Company can only be set once.
+         */
+
+        const existingCompany =
+          await t.get(
+            "card",
+            "shared",
+            "company",
+            null
+          );
+
+
+        if (existingCompany) {
+          throw new Error(
+            "Company already set to " +
+            existingCompany
+          );
+        }
+
 
         await copyCompanyChecklists(
           t,
           company
         );
+
 
         await t.set(
           "card",
@@ -321,7 +361,9 @@
           company
         );
 
+
         await t.closePopup();
+
 
         await t.alert({
           message:
@@ -329,74 +371,112 @@
             " onboarding loaded"
         });
 
+
       } catch (error) {
 
         console.error(error);
 
+
         await t.alert({
           message:
-            "Could not load onboarding: " +
             error.message
         });
       }
     }
 
 
-    function openCompanySelector(t) {
+    /*
+     * =========================================================
+     * DYNAMIC COMPANY MENU
+     * =========================================================
+     */
+
+    async function openCompanySelector(t) {
+
+      const sourceCards =
+        await getSourceCards(t);
+
+
+      if (
+        sourceCards.length === 0
+      ) {
+
+        return t.alert({
+          message:
+            "No onboarding templates found"
+        });
+      }
+
+
+      const items =
+        sourceCards.map(
+          function(source) {
+
+            return {
+              text: source.company,
+
+              callback:
+                function(t) {
+
+                  return chooseCompany(
+                    t,
+                    source.company
+                  );
+                }
+            };
+          }
+        );
+
 
       return t.popup({
         title: "Select company",
-
-        items: [
-          {
-            text: "ASS",
-            callback: function(t) {
-              return chooseCompany(t, "ASS");
-            }
-          },
-
-          {
-            text: "BMS",
-            callback: function(t) {
-              return chooseCompany(t, "BMS");
-            }
-          },
-
-          {
-            text: "BMS AMS",
-            callback: function(t) {
-              return chooseCompany(t, "BMS AMS");
-            }
-          },
-
-          {
-            text: "COVA",
-            callback: function(t) {
-              return chooseCompany(t, "COVA");
-            }
-          }
-        ]
+        items: items
       });
     }
 
 
+    /*
+     * =========================================================
+     * POWER-UP
+     * =========================================================
+     */
+
     window.TrelloPowerUp.initialize({
+
+      /*
+       * -------------------------------------------------------
+       * OPEN CARD BADGES
+       * -------------------------------------------------------
+       */
 
       "card-detail-badges":
         async function(t) {
 
           const card =
-            await t.card("name");
+            await t.card(
+              "name"
+            );
+
+
+          /*
+           * Source cards don't get employee UI.
+           */
 
           if (isSourceCard(card)) {
             return [];
           }
 
+
           const badges = [];
 
 
+          /*
+           * Duplicate warning.
+           */
+
           const duplicate =
             await isDuplicateCard(t);
+
 
           if (duplicate) {
 
@@ -409,6 +489,36 @@
           }
 
 
+          /*
+           * Authorization badge.
+           *
+           * Visible only to users who have
+           * not authorized NKTR Onboarding.
+           */
+
+          const token =
+            await getOAuthToken(t);
+
+
+          if (!token) {
+
+            badges.push({
+              title: "NKTR Access",
+              text: "Authorize",
+
+              callback:
+                function(t) {
+
+                  return authorizeUser(t);
+                }
+            });
+          }
+
+
+          /*
+           * Company badge.
+           */
+
           const company =
             await t.get(
               "card",
@@ -416,6 +526,7 @@
               "company",
               null
             );
+
 
           if (company) {
 
@@ -430,41 +541,59 @@
               title: "Company",
               text: "Set company",
 
-              callback: function(t) {
-                return openCompanySelector(t);
-              }
+              callback:
+                function(t) {
+
+                  return openCompanySelector(
+                    t
+                  );
+                }
             });
           }
+
 
           return badges;
         },
 
 
+      /*
+       * -------------------------------------------------------
+       * CLOSED CARD BADGES
+       * -------------------------------------------------------
+       */
+
       "card-badges":
         async function(t) {
 
           const card =
-            await t.card("name");
+            await t.card(
+              "name"
+            );
+
 
           if (isSourceCard(card)) {
             return [];
           }
 
+
           const badges = [];
 
 
-          badges.push({
+          /*
+           * Dynamic duplicate warning.
+           */
 
+          badges.push({
             dynamic:
               async function() {
 
-                await syncOperationalCover(t);
-
                 const duplicate =
-                  await isDuplicateCard(t);
+                  await isDuplicateCard(
+                    t
+                  );
+
 
                 return {
-
                   text:
                     duplicate
                       ? "⚠ DUPLICATE"
@@ -481,6 +610,10 @@
           });
 
 
+          /*
+           * Company on closed card.
+           */
+
           const company =
             await t.get(
               "card",
@@ -488,6 +621,7 @@
               "company",
               null
             );
+
 
           if (company) {
 
@@ -499,6 +633,7 @@
 
           return badges;
         }
+
 
     }, {
 
