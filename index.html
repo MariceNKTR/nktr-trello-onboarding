@@ -17,6 +17,9 @@ const CLIENT_ID =
 const REDIRECT_URI =
   "https://maricenktr.github.io/nktr-trello-onboarding/oauth-callback.html";
 
+const OFFBOARDING_LIST_ID = "6abfc9b4d6a0cebc239f819e";
+const GUARD_OFFB_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/request";
+
 const TOTAL_PROGRESS_BLOCKS = 10;
 
 const FULLY_OPERATIONAL_LIST =
@@ -763,6 +766,10 @@ async function copyCompanyChecklists(
   t,
   company
 ) {
+  if (await isOffboardingList(t)) {
+    throw new Error("Onboarding wordt niet geladen in de uitstroomlijst.");
+  }
+
 
   const token =
     await getOAuthToken(t);
@@ -871,6 +878,10 @@ async function copyCompanyChecklists(
         checklist.id
       );
 
+    if (await isOffboardingList(t)) {
+      throw new Error("Kaart is verplaatst naar de uitstroomlijst; onboarding gestopt.");
+    }
+
     const response =
       await fetch(
         url,
@@ -905,60 +916,59 @@ async function copyCompanyChecklists(
    COMPANY SELECTION
    ========================================================= */
 
-async function chooseCompany(
-  t,
-  company
-) {
+async function isOffboardingList(t) {
+  const list = await t.list("id");
+  return list.id === OFFBOARDING_LIST_ID;
+}
 
+async function requestImmediateOffboarding(t) {
+  const card = await t.card("id");
+  const jwt = await t.jwt({
+    state: JSON.stringify({ action: "load-offboarding", cardId: card.id }),
+  });
+  const response = await fetch(GUARD_OFFB_URL, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + jwt },
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!response.ok) throw new Error("Direct laden is niet gelukt; automatisch opnieuw proberen volgt.");
+  return response.json();
+}
+
+async function chooseCompany(t, company) {
   try {
-
-    const existingCompany =
-      await t.get(
-        "card",
-        "shared",
-        "company",
-        null
-      );
-
-    if (existingCompany) {
-
-      throw new Error(
-        "Bedrijf is al ingesteld op " +
-        existingCompany
-      );
+    const existingCompany = await t.get("card", "shared", "company", null);
+    if (await isOffboardingList(t)) {
+      if (existingCompany && normalizeCompany(existingCompany) !== normalizeCompany(company)) {
+        throw new Error("Bedrijf is al ingesteld op " + existingCompany);
+      }
+      // Persist first. The Guard independently reads this value from Trello.
+      await t.set("card", "shared", "company", company);
+      let message = "Bedrijf opgeslagen. De uitstroomstappen worden automatisch opnieuw geprobeerd.";
+      try {
+        const result = await requestImmediateOffboarding(t);
+        if (["LOADED", "ALREADY_LOADED"].includes(result.status)) {
+          message = "Uitstroomstappen voor " + company + " zijn geladen.";
+        } else if (result.status === "NOT_APPLICABLE") {
+          message = "Bedrijf opgeslagen. De kaart staat niet meer in de uitstroomlijst.";
+        }
+      } catch (error) {
+        // Company stays saved; scheduled retries remain available.
+        console.warn("Direct uitstroom laden niet beschikbaar; geplande controle volgt.");
+      }
+      await t.closePopup();
+      await t.alert({ message });
+      return;
     }
-
-    await copyCompanyChecklists(
-      t,
-      company
-    );
-
-    await t.set(
-      "card",
-      "shared",
-      "company",
-      company
-    );
-
+    // Preserve the existing onboarding flow outside the offboarding list.
+    if (existingCompany) throw new Error("Bedrijf is al ingesteld op " + existingCompany);
+    await copyCompanyChecklists(t, company);
+    await t.set("card", "shared", "company", company);
     await t.closePopup();
-
-    await t.alert({
-
-      message:
-        "Onboarding voor " +
-        company +
-        " is geladen"
-    });
-
+    await t.alert({ message: "Onboarding voor " + company + " is geladen" });
   } catch (error) {
-
     console.error(error);
-
-    await t.alert({
-
-      message:
-        error.message
-    });
+    await t.alert({ message: error.message });
   }
 }
 
@@ -1218,11 +1228,11 @@ window.TrelloPowerUp.initialize({
 
         badges.push({
 
-          title:
-            "Bedrijf",
-
-          text:
-            company
+          title: "Bedrijf",
+          text: company,
+          callback: await isOffboardingList(t)
+            ? function(t) { return chooseCompany(t, company); }
+            : undefined
         });
 
       } else {
