@@ -20,6 +20,7 @@ const REDIRECT_URI =
 const OFFBOARDING_LIST_ID = "6abfc9b4d6a0cebc239f819e";
 const GUARD_OFFB_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/request";
 const GUARD_ONB_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/onb/request";
+const GUARD_COVER_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/cover/sync";
 
 const TOTAL_PROGRESS_BLOCKS = 10;
 
@@ -678,15 +679,64 @@ async function removeCardCover(
 }
 
 
+async function requestImmediateCoverSync(t) {
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "sync-cover",
+          cardId:
+            card.id,
+        }),
+    });
+
+  const response =
+    await fetch(
+      GUARD_COVER_URL,
+      {
+        method:
+          "POST",
+
+        headers: {
+          Authorization:
+            "Bearer " +
+            jwt,
+        },
+
+        signal:
+          AbortSignal.timeout(
+            20000
+          ),
+      }
+    );
+
+  const result =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      result.error ||
+      "Omslagsynchronisatie mislukt"
+    );
+  }
+
+  return result;
+}
+
+
 async function syncOperationalCover(t) {
 
   try {
 
     const card =
       await t.card(
-        "id",
-        "name",
-        "cover"
+        "name"
       );
 
     if (
@@ -696,58 +746,7 @@ async function syncOperationalCover(t) {
       return;
     }
 
-    const list =
-      await t.list(
-        "name"
-      );
-
-    const token =
-      await getOAuthToken(t);
-
-    if (!token) {
-      return;
-    }
-
-    const isFullyOperational =
-      list.name ===
-      FULLY_OPERATIONAL_LIST;
-
-    const isGreen =
-      card.cover &&
-      card.cover.color === "green";
-
-    const isHalfCover =
-      card.cover &&
-      card.cover.size === "normal";
-
-
-    if (isFullyOperational) {
-
-      if (
-        !isGreen ||
-        !isHalfCover
-      ) {
-
-        await setGreenHalfCover(
-          token,
-          card.id
-        );
-      }
-
-      return;
-    }
-
-
-    if (
-      !isFullyOperational &&
-      isGreen
-    ) {
-
-      await removeCardCover(
-        token,
-        card.id
-      );
-    }
+    await requestImmediateCoverSync(t);
 
   } catch (error) {
 
@@ -1288,31 +1287,6 @@ window.TrelloPowerUp.initialize({
           });
         }
       }
-
-
-      const token =
-        await getOAuthToken(t);
-
-
-      if (!token) {
-
-        badges.push({
-
-          title:
-            "NKTR-toegang",
-
-          text:
-            "Autoriseren",
-
-          callback:
-            function(t) {
-
-              return authorizeUser(t);
-            }
-        });
-      }
-
-
       const company =
         await t.get(
           "card",
