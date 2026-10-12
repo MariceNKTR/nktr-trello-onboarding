@@ -1,0 +1,199 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+  <title>Uitstroomreden</title>
+
+  <style>
+    body {
+      font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+      margin: 12px;
+      color: #172b4d;
+      background: #ffffff;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    input {
+      box-sizing: border-box;
+      width: 100%;
+      min-height: 36px;
+      border: 1px solid #8590a2;
+      border-radius: 3px;
+      padding: 8px 10px;
+      font-size: 14px;
+    }
+
+    button {
+      width: 100%;
+      margin-top: 10px;
+      min-height: 36px;
+      border: 0;
+      border-radius: 3px;
+      background: #0c66e4;
+      color: #ffffff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    #message {
+      min-height: 18px;
+      margin-top: 8px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+
+<form id="reason-form">
+  <label for="reason">
+    Korte omschrijving
+  </label>
+
+  <input
+    id="reason"
+    maxlength="200"
+    autocomplete="off"
+    required
+    autofocus
+  >
+
+  <button type="submit">
+    Opslaan
+  </button>
+
+  <div id="message"></div>
+</form>
+
+<script src="https://p.trellocdn.com/power-up.min.js"></script>
+
+<script>
+const GUARD_REASON_URL =
+  "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/reason";
+
+const t =
+  window.TrelloPowerUp.iframe();
+
+const form =
+  document.getElementById(
+    "reason-form"
+  );
+
+const input =
+  document.getElementById(
+    "reason"
+  );
+
+const message =
+  document.getElementById(
+    "message"
+  );
+
+form.addEventListener(
+  "submit",
+  async function(event) {
+
+    event.preventDefault();
+
+    const detail =
+      input.value.trim();
+
+    if (!detail) {
+      return;
+    }
+
+    try {
+      message.textContent =
+        "Opslaan...";
+
+      const card =
+        await t.card(
+          "id"
+        );
+
+      const reason =
+        "Overig: " +
+        detail;
+
+      const jwt =
+        await t.jwt({
+          state:
+            JSON.stringify({
+              action:
+                "set-offb-reason",
+              cardId:
+                card.id,
+              reason:
+                reason,
+            }),
+        });
+
+      const response =
+        await fetch(
+          GUARD_REASON_URL,
+          {
+            method:
+              "POST",
+
+            headers: {
+              Authorization:
+                "Bearer " +
+                jwt,
+            },
+
+            signal:
+              AbortSignal.timeout(
+                20000
+              ),
+          }
+        );
+
+      const result =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error ||
+          "Opslaan mislukt"
+        );
+      }
+
+      await t.set(
+        "card",
+        "shared",
+        "offbReason",
+        reason
+      );
+
+      await t.closePopup();
+
+    } catch (error) {
+
+      console.error(
+        error
+      );
+
+      message.textContent =
+        error.message ||
+        "Opslaan mislukt";
+    }
+  }
+);
+</script>
+
+</body>
+</html>
