@@ -21,6 +21,7 @@ const OFFBOARDING_LIST_ID = "6abfc9b4d6a0cebc239f819e";
 const GUARD_OFFB_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/request";
 const GUARD_ONB_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/onb/request";
 const GUARD_COVER_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/cover/sync";
+const GUARD_REASON_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/reason";
 
 const TOTAL_PROGRESS_BLOCKS = 10;
 
@@ -80,10 +81,22 @@ function hasInactiveLabel(labels) {
 }
 
 
+function isOffboardingSourceCardName(name) {
+  return /^🔒︎\s*OFFB\s*\|\s*Stappenbron$/i.test(
+    String(name || "").trim()
+  );
+}
+
+
 function isSourceCard(card) {
 
-  return !!getCompanyFromSourceCardName(
-    card.name
+  return (
+    !!getCompanyFromSourceCardName(
+      card.name
+    ) ||
+    isOffboardingSourceCardName(
+      card.name
+    )
   );
 }
 
@@ -101,7 +114,7 @@ function isSeparatorCard(card) {
 
   return (
     name.startsWith("──") ||
-    name.startsWith("↓↓↓↓")
+    /^↓{2,}/.test(name)
   );
 }
 
@@ -491,7 +504,7 @@ async function getProgressBar(t) {
 
   return (
     "█".repeat(filled) +
-    "░".repeat(
+    "-".repeat(
       TOTAL_PROGRESS_BLOCKS -
       filled
     )
@@ -515,169 +528,38 @@ async function hasIncompleteSteps(t) {
 }
 
 
-/* =========================================================
-   OAUTH
-   ========================================================= */
+async function hasNoChecklistItems(t) {
 
-async function getOAuthToken(t) {
+  const progress =
+    await getChecklistProgress(t);
 
-  try {
-
-    const oauth =
-      t.getOAuth2ApiClient();
-
-    return await oauth.getAccessToken();
-
-  } catch (error) {
-
-    return null;
-  }
+  return progress.total === 0;
 }
 
 
-async function authorizeUser(t) {
+async function hasOnboardingChecklist(t) {
 
-  try {
-
-    const oauth =
-      t.getOAuth2ApiClient();
-
-    await oauth.authorize({
-
-      scopes: [
-        "read:board:trello",
-        "write:board:trello"
-      ]
-    });
-
-    await t.alert({
-
-      message:
-        "NKTR Onboarding is geautoriseerd"
-    });
-
-  } catch (error) {
-
-    console.error(
-      "Autorisatie mislukt:",
-      error
+  const card =
+    await t.card(
+      "checklists"
     );
 
-    await t.alert({
-
-      message:
-        "Autorisatie mislukt"
-    });
-  }
+  return (
+    card.checklists || []
+  ).some(
+    checklist =>
+      !/^OFFB\s*\|/i.test(
+        String(
+          checklist.name || ""
+        )
+      )
+  );
 }
 
 
 /* =========================================================
    CARD COVER
    ========================================================= */
-
-async function setGreenHalfCover(
-  token,
-  cardId
-) {
-
-  const response =
-    await fetch(
-
-      "https://api.trello.com/1/cards/" +
-      cardId,
-
-      {
-
-        method:
-          "PUT",
-
-        headers: {
-
-          "Authorization":
-            "Bearer " + token,
-
-          "Accept":
-            "application/json",
-
-          "Content-Type":
-            "application/json"
-        },
-
-        body:
-          JSON.stringify({
-
-            cover: {
-
-              color:
-                "green",
-
-              size:
-                "normal",
-
-              brightness:
-                "dark"
-            }
-          })
-      }
-    );
-
-  if (!response.ok) {
-
-    throw new Error(
-      "Groene omslag mislukt: " +
-      response.status
-    );
-  }
-}
-
-
-async function removeCardCover(
-  token,
-  cardId
-) {
-
-  const response =
-    await fetch(
-
-      "https://api.trello.com/1/cards/" +
-      cardId,
-
-      {
-
-        method:
-          "PUT",
-
-        headers: {
-
-          "Authorization":
-            "Bearer " + token,
-
-          "Accept":
-            "application/json",
-
-          "Content-Type":
-            "application/json"
-        },
-
-        body:
-          JSON.stringify({
-
-            cover:
-              ""
-          })
-      }
-    );
-
-  if (!response.ok) {
-
-    throw new Error(
-      "Omslag verwijderen mislukt: " +
-      response.status
-    );
-  }
-}
-
 
 async function requestImmediateCoverSync(t) {
   const card =
@@ -754,160 +636,6 @@ async function syncOperationalCover(t) {
       "Omslagsynchronisatie mislukt:",
       error
     );
-  }
-}
-
-
-/* =========================================================
-   COPY COMPANY CHECKLISTS
-   ========================================================= */
-
-async function copyCompanyChecklists(
-  t,
-  company
-) {
-  if (await isOffboardingList(t)) {
-    throw new Error("Onboarding wordt niet geladen in de uitstroomlijst.");
-  }
-
-
-  const token =
-    await getOAuthToken(t);
-
-  if (!token) {
-
-    throw new Error(
-      "Autoriseer NKTR Onboarding eerst"
-    );
-  }
-
-  const currentCard =
-    await t.card(
-      "id",
-      "name"
-    );
-
-  const sourceCards =
-    await getSourceCards(t);
-
-  const companyKey =
-    normalizeCompany(company);
-
-
-  const matchingSources =
-    sourceCards.filter(
-      function(card) {
-
-        return (
-          card.companyKey ===
-          companyKey
-        );
-      }
-    );
-
-
-  if (matchingSources.length > 1) {
-
-    throw new Error(
-      "Bedrijf komt meerdere keren voor"
-    );
-  }
-
-
-  const sourceCard =
-    matchingSources[0];
-
-
-  if (!sourceCard) {
-
-    throw new Error(
-      "Stappenbron niet gevonden voor " +
-      company
-    );
-  }
-
-
-  if (sourceCard.inactive) {
-
-    throw new Error(
-      "Dit bedrijf is inactief"
-    );
-  }
-
-
-  if (
-    !sourceCard.checklists ||
-    sourceCard.checklists.length === 0
-  ) {
-
-    throw new Error(
-      "De stappenbron van " +
-      company +
-      " bevat geen checklists"
-    );
-  }
-
-
-  const existing =
-    await t.card(
-      "checklists"
-    );
-
-
-  if (
-    existing.checklists &&
-    existing.checklists.length > 0
-  ) {
-
-    throw new Error(
-      "Deze medewerker heeft al checklists"
-    );
-  }
-
-
-  for (
-    const checklist
-    of sourceCard.checklists
-  ) {
-
-    const url =
-      "https://api.trello.com/1/cards/" +
-      currentCard.id +
-      "/checklists?idChecklistSource=" +
-      encodeURIComponent(
-        checklist.id
-      );
-
-    if (await isOffboardingList(t)) {
-      throw new Error("Kaart is verplaatst naar de uitstroomlijst; onboarding gestopt.");
-    }
-
-    const response =
-      await fetch(
-        url,
-        {
-
-          method:
-            "POST",
-
-          headers: {
-
-            "Authorization":
-              "Bearer " + token,
-
-            "Accept":
-              "application/json"
-          }
-        }
-      );
-
-    if (!response.ok) {
-
-      throw new Error(
-        "Checklist kopiëren mislukt: " +
-        response.status
-      );
-    }
   }
 }
 
@@ -990,6 +718,209 @@ async function requestImmediateOnboarding(
 
   return result;
 }
+
+
+async function requestOffboardingReason(
+  t,
+  reason
+) {
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "set-offb-reason",
+          cardId:
+            card.id,
+          reason:
+            reason,
+        }),
+    });
+
+  const response =
+    await fetch(
+      GUARD_REASON_URL,
+      {
+        method:
+          "POST",
+
+        headers: {
+          Authorization:
+            "Bearer " +
+            jwt,
+        },
+
+        signal:
+          AbortSignal.timeout(
+            20000
+          ),
+      }
+    );
+
+  const result =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      result.error ||
+      "Uitstroomreden opslaan mislukt"
+    );
+  }
+
+  await t.set(
+    "card",
+    "shared",
+    "offbReason",
+    reason
+  );
+
+  return result;
+}
+
+
+async function saveReasonChoice(
+  t,
+  reason
+) {
+  let finalReason =
+    reason;
+
+  if (reason === "Overig") {
+    return t.popup({
+      title:
+        "Overig",
+
+      url:
+        "./offb-reason-other.html",
+
+      height:
+        190
+    });
+  }
+
+  try {
+    await requestOffboardingReason(
+      t,
+      finalReason
+    );
+
+    await t.closePopup();
+
+    await t.alert({
+      message:
+        "Uitstroomreden opgeslagen"
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    await t.alert({
+      message:
+        error.message
+    });
+  }
+}
+
+
+function openOffboardingReasonSelector(t) {
+
+  const reasons = [
+    "Ontslagname",
+    "Einde contract",
+    "Ontslag",
+    "Interne wijziging",
+    "Langdurige afwezigheid",
+    "Overig",
+  ];
+
+  return t.popup({
+    title:
+      "Uitstroomreden",
+
+    items:
+      reasons.map(
+        reason => ({
+          text:
+            reason,
+
+          callback:
+            function(t) {
+              return saveReasonChoice(
+                t,
+                reason
+              );
+            }
+        })
+      )
+  });
+}
+
+
+async function reloadOnboarding(t) {
+
+  try {
+    const company =
+      await t.get(
+        "card",
+        "shared",
+        "company",
+        null
+      );
+
+    if (!company) {
+      throw new Error(
+        "Stel eerst een bedrijf in"
+      );
+    }
+
+    const result =
+      await requestImmediateOnboarding(
+        t,
+        company
+      );
+
+    if (
+      ![
+        "LOADED",
+        "ALREADY_LOADED",
+        "RETRY_PENDING"
+      ].includes(
+        result.status
+      )
+    ) {
+      throw new Error(
+        "Onboarding kon niet worden geladen"
+      );
+    }
+
+    await t.alert({
+      message:
+        result.status ===
+          "ALREADY_LOADED"
+          ? "Onboarding is al aanwezig"
+          : (
+              result.status ===
+                "RETRY_PENDING"
+                ? "Onboarding wordt opnieuw geprobeerd"
+                : "Ontbrekende onboarding is geladen"
+            )
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    await t.alert({
+      message:
+        error.message
+    });
+  }
+}
+
 
 async function chooseCompany(t, company) {
   try {
@@ -1328,6 +1259,66 @@ window.TrelloPowerUp.initialize({
       }
 
 
+      const inOffboarding =
+        await isOffboardingList(t);
+
+      if (inOffboarding) {
+
+        const offbReason =
+          await t.get(
+            "card",
+            "shared",
+            "offbReason",
+            null
+          );
+
+        badges.push({
+
+          title:
+            "Uitstroomreden",
+
+          text:
+            offbReason ||
+            "Reden instellen",
+
+          callback:
+            function(t) {
+
+              return openOffboardingReasonSelector(
+                t
+              );
+            }
+        });
+
+      } else if (company) {
+
+        const hasOnboarding =
+          await hasOnboardingChecklist(
+            t
+          );
+
+        if (!hasOnboarding) {
+
+          badges.push({
+
+            title:
+              "Onboarding",
+
+            text:
+              "Onboarding laden",
+
+            callback:
+              function(t) {
+
+                return reloadOnboarding(
+                  t
+                );
+              }
+          });
+        }
+      }
+
+
       return badges;
     },
 
@@ -1429,21 +1420,32 @@ window.TrelloPowerUp.initialize({
               );
 
 
-              const incomplete =
-                await hasIncompleteSteps(
+              const noChecklist =
+                await hasNoChecklistItems(
                   t
                 );
+
+              const incomplete =
+                noChecklist
+                  ? false
+                  : await hasIncompleteSteps(
+                      t
+                    );
 
 
               return {
 
                 text:
-                  incomplete
-                    ? "⚠ ONVOLLEDIG"
-                    : "",
+                  noChecklist
+                    ? "⚠ GEEN ONBOARDING"
+                    : (
+                        incomplete
+                          ? "⚠ ONVOLLEDIG"
+                          : ""
+                      ),
 
                 color:
-                  incomplete
+                  (noChecklist || incomplete)
                     ? "red"
                     : null,
 
