@@ -976,6 +976,19 @@ async function chooseCompany(t, company) {
       );
     }
 
+    /*
+     * Persist the company first.
+     * The Guard request may succeed in copying checklists and then hit
+     * a secondary warning-label/API issue. The company must never be
+     * lost just because a later backend step failed.
+     */
+    await t.set(
+      "card",
+      "shared",
+      "company",
+      company
+    );
+
     const result =
       await requestImmediateOnboarding(
         t,
@@ -984,23 +997,13 @@ async function chooseCompany(t, company) {
 
     if (
       result.status !== "LOADED" &&
-      result.status !== "ALREADY_LOADED"
+      result.status !== "ALREADY_LOADED" &&
+      result.status !== "RETRY_PENDING"
     ) {
       throw new Error(
-        "Onboarding kon niet worden geladen"
+        "Bedrijf opgeslagen, maar onboarding kon niet volledig worden geladen"
       );
     }
-
-    /*
-     * Save company only after the Guard has
-     * successfully handled the onboarding.
-     */
-    await t.set(
-      "card",
-      "shared",
-      "company",
-      company
-    );
 
     await t.closePopup();
 
@@ -1010,9 +1013,14 @@ async function chooseCompany(t, company) {
           "ALREADY_LOADED"
           ? "Onboarding is al aanwezig. Bedrijf ingesteld op " +
             company
-          : "Onboarding voor " +
-            company +
-            " is geladen"
+          : (
+              result.status ===
+                "RETRY_PENDING"
+                ? "Bedrijf is opgeslagen. Onboarding wordt opnieuw geprobeerd."
+                : "Onboarding voor " +
+                  company +
+                  " is geladen"
+            )
     });
   } catch (error) {
     console.error(error);
