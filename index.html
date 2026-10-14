@@ -19,6 +19,9 @@ const REDIRECT_URI =
 
 const OFFBOARDING_LIST_ID = "6abfc9b4d6a0cebc239f819e";
 const GUARD_OFFB_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/request";
+const GUARD_DUPLICATE_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/employee/duplicates";
+const GUARD_RESTORE_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/employee/restore";
+const DASHBOARD_URL = "./dashboard.html";
 const GUARD_ONB_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/onb/request";
 const GUARD_COVER_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/cover/sync";
 const GUARD_REASON_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/reason";
@@ -269,194 +272,221 @@ function getNameParts(name) {
 
 
 /* =========================================================
-   EXACT DUPLICATE EMPLOYEE
+   EMPLOYEE DUPLICATE CHECK
+   Guard checks open + archived employee cards.
    ========================================================= */
 
-async function isDuplicateCard(t) {
-
-  const currentCard =
+async function getDuplicateStatus(
+  t
+) {
+  const card =
     await t.card(
       "id",
       "name"
     );
 
   if (
-    isSourceCard(currentCard) ||
-    isSeparatorCard(currentCard)
+    isSourceCard(
+      card
+    ) ||
+    isSeparatorCard(
+      card
+    )
   ) {
-    return false;
+    return {
+      duplicate:
+        false,
+      matches:
+        []
+    };
   }
 
-  const cards =
-    await t.cards(
-      "id",
-      "name"
-    );
-
-  const currentName =
-    normalizeName(
-      currentCard.name
-    );
-
-  if (!currentName) {
-    return false;
-  }
-
-  const matches =
-    cards.filter(function(card) {
-
-      if (
-        isSourceCard(card) ||
-        isSeparatorCard(card)
-      ) {
-        return false;
-      }
-
-      return (
-        normalizeName(card.name) ===
-        currentName
-      );
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "duplicate-check",
+          cardId:
+            card.id
+        })
     });
 
-  return matches.length > 1;
-}
-
-
-/* =========================================================
-   POSSIBLE DUPLICATE EMPLOYEE
-   ========================================================= */
-
-function namesPossiblyMatch(
-  firstName,
-  secondName
-) {
-
-  const firstParts =
-    getNameParts(firstName);
-
-  const secondParts =
-    getNameParts(secondName);
-
-
-  if (
-    firstParts.length === 0 ||
-    secondParts.length === 0
-  ) {
-    return false;
-  }
-
-
-  if (
-    firstParts[0] !==
-    secondParts[0]
-  ) {
-    return false;
-  }
-
-
-  if (
-    normalizeName(firstName) ===
-    normalizeName(secondName)
-  ) {
-    return false;
-  }
-
-
-  if (
-    firstParts.length === 1 &&
-    secondParts.length > 1
-  ) {
-    return true;
-  }
-
-
-  if (
-    secondParts.length === 1 &&
-    firstParts.length > 1
-  ) {
-    return true;
-  }
-
-
-  const firstRest =
-    firstParts
-      .slice(1)
-      .join("");
-
-  const secondRest =
-    secondParts
-      .slice(1)
-      .join("");
-
-
-  if (
-    !firstRest ||
-    !secondRest
-  ) {
-    return false;
-  }
-
-
-  return (
-    firstRest.startsWith(
-      secondRest
-    ) ||
-    secondRest.startsWith(
-      firstRest
-    )
-  );
-}
-
-
-async function isPossibleDuplicateCard(t) {
-
-  const currentCard =
-    await t.card(
-      "id",
-      "name"
-    );
-
-  if (
-    isSourceCard(currentCard) ||
-    isSeparatorCard(currentCard)
-  ) {
-    return false;
-  }
-
-
-  const exactDuplicate =
-    await isDuplicateCard(t);
-
-  if (exactDuplicate) {
-    return false;
-  }
-
-
-  const cards =
-    await t.cards(
-      "id",
-      "name"
-    );
-
-
-  return cards.some(
-    function(card) {
-
-      if (
-        card.id === currentCard.id ||
-        isSourceCard(card) ||
-        isSeparatorCard(card)
-      ) {
-        return false;
+  const response =
+    await fetch(
+      GUARD_DUPLICATE_URL,
+      {
+        method:
+          "POST",
+        headers: {
+          "Authorization":
+            "Bearer " +
+            jwt
+        },
+        signal:
+          AbortSignal.timeout(
+            20000
+          )
       }
+    );
+
+  if (
+    !response.ok
+  ) {
+    throw new Error(
+      "Dubbelcontrole mislukt"
+    );
+  }
+
+  return response.json();
+}
 
 
-      return namesPossiblyMatch(
-        currentCard.name,
-        card.name
+async function restoreArchivedDuplicate(
+  t,
+  restoreCardId
+) {
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "restore-archived",
+          cardId:
+            card.id,
+          restoreCardId:
+            restoreCardId
+        })
+    });
+
+  const response =
+    await fetch(
+      GUARD_RESTORE_URL,
+      {
+        method:
+          "POST",
+        headers: {
+          "Authorization":
+            "Bearer " +
+            jwt
+        },
+        signal:
+          AbortSignal.timeout(
+            20000
+          )
+      }
+    );
+
+  const body =
+    await response.json()
+      .catch(
+        function() {
+          return {};
+        }
       );
-    }
-  );
+
+  if (
+    !response.ok
+  ) {
+    throw new Error(
+      body.error ||
+      "Herstellen uit archief mislukt"
+    );
+  }
+
+  await t.alert({
+    message:
+      "Oude medewerkerkaart hersteld; nieuwe dubbele kaart gearchiveerd."
+  });
+
+  return t.closePopup();
+}
+
+
+async function openDuplicatePopup(
+  t,
+  status
+) {
+  const result =
+    status ||
+    await getDuplicateStatus(
+      t
+    );
+
+  const matches =
+    result.matches ||
+    [];
+
+  if (
+    !matches.length
+  ) {
+    return t.alert({
+      message:
+        "Geen mogelijke dubbele medewerker gevonden."
+    });
+  }
+
+  const items =
+    matches.map(
+      function(match) {
+
+        if (
+          match.archived
+        ) {
+          return {
+            text:
+              "Herstellen uit archief · " +
+              match.name,
+
+            callback:
+              function(t) {
+
+                return restoreArchivedDuplicate(
+                  t,
+                  match.id
+                );
+              }
+          };
+        }
+
+        return {
+          text:
+            "Actieve kaart · " +
+            match.name,
+
+          callback:
+            function(t) {
+
+              if (
+                match.url
+              ) {
+                return t.navigate({
+                  url:
+                    match.url
+                });
+              }
+
+              return t.alert({
+                message:
+                  match.name
+              });
+            }
+        };
+      }
+    );
+
+  return t.popup({
+    title:
+      "⚠ MOGELIJK DUBBEL",
+
+    items:
+      items
+  });
 }
 
 
@@ -1233,10 +1263,56 @@ async function openCompanySelector(t) {
 
 
 /* =========================================================
+   DASHBOARD
+   ========================================================= */
+
+function openNktrDashboard(
+  t
+) {
+  return t.modal({
+    url:
+      DASHBOARD_URL,
+
+    title:
+      "NKTR Dashboard",
+
+    fullscreen:
+      true
+  });
+}
+
+
+/* =========================================================
    POWER-UP
    ========================================================= */
 
 window.TrelloPowerUp.initialize({
+
+
+  /* -------------------------------------------------------
+     BOARD DASHBOARD
+     ------------------------------------------------------- */
+
+  "board-buttons":
+    function(t) {
+
+      return [{
+
+        text:
+          "NKTR Dashboard",
+
+        condition:
+          "admin",
+
+        callback:
+          function(t) {
+
+            return openNktrDashboard(
+              t
+            );
+          }
+      }];
+    },
 
 
   /* -------------------------------------------------------
@@ -1312,33 +1388,16 @@ window.TrelloPowerUp.initialize({
       const badges = [];
 
 
-      const duplicate =
-        await isDuplicateCard(t);
+      try {
 
-
-      if (duplicate) {
-
-        badges.push({
-
-          title:
-            "Waarschuwing",
-
-          text:
-            "Medewerker dubbel",
-
-          color:
-            "red"
-        });
-
-      } else {
-
-        const possibleDuplicate =
-          await isPossibleDuplicateCard(
+        const duplicateStatus =
+          await getDuplicateStatus(
             t
           );
 
-
-        if (possibleDuplicate) {
+        if (
+          duplicateStatus.duplicate
+        ) {
 
           badges.push({
 
@@ -1346,13 +1405,31 @@ window.TrelloPowerUp.initialize({
               "Waarschuwing",
 
             text:
-              "Mogelijk dubbel",
+              "⚠ MOGELIJK DUBBEL",
 
             color:
-              "yellow"
+              "yellow",
+
+            callback:
+              function(t) {
+
+                return openDuplicatePopup(
+                  t,
+                  duplicateStatus
+                );
+              }
           });
         }
+
+      } catch (error) {
+
+        console.error(
+          "Dubbelcontrole mislukt:",
+          error
+        );
       }
+
+
       const company =
         await t.get(
           "card",
@@ -1637,49 +1714,45 @@ window.TrelloPowerUp.initialize({
             );
 
 
-            const duplicate =
-              await isDuplicateCard(
-                t
-              );
+            try {
 
-
-            if (duplicate) {
+              const duplicateStatus =
+                await getDuplicateStatus(
+                  t
+                );
 
               return {
 
                 text:
-                  "⚠ MEDEWERKER DUBBEL",
+                  duplicateStatus.duplicate
+                    ? "⚠ MOGELIJK DUBBEL"
+                    : "",
 
                 color:
-                  "red",
+                  duplicateStatus.duplicate
+                    ? "yellow"
+                    : null,
 
                 refresh:
-                  10
+                  30
               };
-            }
 
+            } catch (error) {
 
-            const possibleDuplicate =
-              await isPossibleDuplicateCard(
-                t
+              console.error(
+                "Dubbelcontrole mislukt:",
+                error
               );
 
+              return {
 
-            return {
+                text:
+                  "",
 
-              text:
-                possibleDuplicate
-                  ? "⚠ MOGELIJK DUBBEL"
-                  : "",
-
-              color:
-                possibleDuplicate
-                  ? "yellow"
-                  : null,
-
-              refresh:
-                10
-            };
+                refresh:
+                  30
+              };
+            }
           }
       });
 
