@@ -22,6 +22,7 @@ const GUARD_OFFB_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trel
 const GUARD_ONB_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/onb/request";
 const GUARD_COVER_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/cover/sync";
 const GUARD_REASON_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/reason";
+const GUARD_REASON_STATUS_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/reason/status";
 
 const TOTAL_PROGRESS_BLOCKS = 10;
 
@@ -909,6 +910,46 @@ async function saveReasonChoice(
 }
 
 
+async function getOffboardingReasonStatus(t) {
+
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "get-offb-reason-status",
+          cardId:
+            card.id,
+        }),
+    });
+
+  const response =
+    await fetch(
+      GUARD_REASON_STATUS_URL,
+      {
+        method: "POST",
+        headers: {
+          Authorization:
+            `Bearer ${jwt}`,
+        },
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      "Uitstroomredenstatus ophalen mislukt"
+    );
+  }
+
+  return response.json();
+}
+
+
 function openOffboardingReasonSelector(t) {
 
   const reasons = [
@@ -1358,13 +1399,39 @@ window.TrelloPowerUp.initialize({
 
       if (inOffboarding) {
 
-        const offbReason =
+        let reasonState = null;
+
+        try {
+          reasonState =
+            await getOffboardingReasonStatus(
+              t
+            );
+        } catch (error) {
+          console.error(
+            "Reason status lookup failed",
+            error
+          );
+        }
+
+        const fallbackReason =
           await t.get(
             "card",
             "shared",
             "offbReason",
             null
           );
+
+        const offbReason =
+          reasonState
+            ? reasonState.reason
+            : fallbackReason;
+
+        const reasonMissing =
+          reasonState
+            ? Boolean(
+                reasonState.missing
+              )
+            : !offbReason;
 
         badges.push({
 
@@ -1373,7 +1440,12 @@ window.TrelloPowerUp.initialize({
 
           text:
             offbReason ||
-            "Reden instellen",
+            "Reden toevoegen",
+
+          color:
+            reasonMissing
+              ? "yellow"
+              : null,
 
           callback:
             function(t) {
