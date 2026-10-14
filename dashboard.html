@@ -1,0 +1,1093 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>NKTR Dashboard</title>
+
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f4f5f7;
+      --panel: #ffffff;
+      --text: #172b4d;
+      --muted: #6b778c;
+      --line: #dfe1e6;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1d2125;
+        --panel: #22272b;
+        --text: #f1f2f4;
+        --muted: #9fadbc;
+        --line: #454f59;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .wrap {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    button.active {
+      background: var(--text);
+      color: var(--panel);
+      border-color: var(--text);
+    }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(145px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .kpi-label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .kpi-value {
+      font-size: 30px;
+      font-weight: 750;
+      line-height: 1;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.7fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      margin: 0 0 4px;
+      font-size: 16px;
+    }
+
+    .section-sub {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .legend {
+      display: flex;
+      gap: 16px;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+
+    .legend span::before {
+      content: "";
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      margin-right: 6px;
+      border-radius: 2px;
+      background: currentColor;
+    }
+
+    .legend .onb {
+      color: #579dff;
+    }
+
+    .legend .offb {
+      color: #f87168;
+    }
+
+    .legend .op {
+      color: #4bce97;
+    }
+
+    .chart {
+      min-height: 280px;
+      display: flex;
+      align-items: end;
+      gap: 10px;
+      overflow-x: auto;
+      padding: 12px 4px 28px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .bucket {
+      min-width: 54px;
+      flex: 1 0 54px;
+      height: 220px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: end;
+    }
+
+    .bars {
+      height: 190px;
+      display: flex;
+      align-items: end;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .bar {
+      width: 28%;
+      min-height: 2px;
+      position: relative;
+      border-radius: 4px 4px 0 0;
+    }
+
+    .bar.onb {
+      background: #579dff;
+    }
+
+    .bar.offb {
+      background: #f87168;
+    }
+
+    .bar.op {
+      background: #4bce97;
+    }
+
+    .bar:hover::after {
+      content: attr(data-value);
+      position: absolute;
+      bottom: calc(100% + 4px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--text);
+      color: var(--panel);
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+
+    .bucket-label {
+      position: absolute;
+      bottom: -23px;
+      width: 100%;
+      text-align: center;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .reason-row {
+      display: grid;
+      grid-template-columns: minmax(110px, 1fr) 2fr 34px;
+      gap: 10px;
+      align-items: center;
+      margin: 10px 0;
+      font-size: 13px;
+    }
+
+    .track {
+      height: 9px;
+      overflow: hidden;
+      background: var(--line);
+      border-radius: 999px;
+    }
+
+    .fill {
+      height: 100%;
+      background: #6554c0;
+      border-radius: 999px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      padding: 10px 8px;
+      text-align: right;
+      border-bottom: 1px solid var(--line);
+    }
+
+    th:first-child,
+    td:first-child {
+      text-align: left;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 650;
+    }
+
+    .empty {
+      color: var(--muted);
+      padding: 24px 0;
+      text-align: center;
+      font-size: 13px;
+    }
+
+    .footer {
+      margin-top: 10px;
+      color: var(--muted);
+      text-align: right;
+      font-size: 11px;
+    }
+
+    @media (max-width: 1000px) {
+      .kpis {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .top {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="wrap">
+
+    <div class="top">
+
+      <h1>NKTR Dashboard</h1>
+
+      <div
+        class="filters"
+        id="filters"
+      >
+        <button data-period="week">
+          Deze week
+        </button>
+
+        <button data-period="month">
+          Deze maand
+        </button>
+
+        <button
+          data-period="year"
+          class="active"
+        >
+          Dit jaar
+        </button>
+
+        <button data-period="all">
+          Alles
+        </button>
+      </div>
+
+    </div>
+
+
+    <div class="kpis">
+
+      <div class="card">
+        <div class="kpi-label">
+          Onboarding
+        </div>
+        <div
+          class="kpi-value"
+          id="k-onb"
+        >–</div>
+      </div>
+
+      <div class="card">
+        <div class="kpi-label">
+          Operationeel
+        </div>
+        <div
+          class="kpi-value"
+          id="k-op"
+        >–</div>
+      </div>
+
+      <div class="card">
+        <div class="kpi-label">
+          Uitstroom
+        </div>
+        <div
+          class="kpi-value"
+          id="k-offb"
+        >–</div>
+      </div>
+
+      <div class="card">
+        <div class="kpi-label">
+          Uitgestroomd
+        </div>
+        <div
+          class="kpi-value"
+          id="k-out"
+        >–</div>
+      </div>
+
+      <div class="card">
+        <div class="kpi-label">
+          Afwijkend traject
+        </div>
+        <div
+          class="kpi-value"
+          id="k-dev"
+        >–</div>
+      </div>
+
+    </div>
+
+
+    <div class="grid">
+
+      <section class="card">
+
+        <h2 class="section-title">
+          Bewegingen
+        </h2>
+
+        <p class="section-sub">
+          Unieke medewerkerkaarten per gekozen periode. Herhaalde bewegingen van dezelfde kaart tellen niet dubbel.
+        </p>
+
+        <div class="legend">
+          <span class="onb">
+            Onboarding
+          </span>
+          <span class="offb">
+            Uitstroom
+          </span>
+          <span class="op">
+            Operationeel
+          </span>
+        </div>
+
+        <div
+          id="movement"
+          class="chart"
+        >
+          <div class="empty">
+            Laden…
+          </div>
+        </div>
+
+      </section>
+
+
+      <section class="card">
+
+        <h2 class="section-title">
+          Uitstroomredenen
+        </h2>
+
+        <p class="section-sub">
+          Laatste geregistreerde reden per medewerker binnen de gekozen periode.
+        </p>
+
+        <div id="reasons">
+          <div class="empty">
+            Laden…
+          </div>
+        </div>
+
+      </section>
+
+    </div>
+
+
+    <section class="card">
+
+      <h2 class="section-title">
+        Per bedrijf
+      </h2>
+
+      <p class="section-sub">
+        Huidige status per medewerker. Afwijkend traject is een extra indicator en kan naast een huidige status voorkomen.
+      </p>
+
+      <div style="overflow-x:auto">
+
+        <table>
+
+          <thead>
+            <tr>
+              <th>Bedrijf</th>
+              <th>Onboarding</th>
+              <th>Operationeel</th>
+              <th>Uitstroom</th>
+              <th>Uitgestroomd</th>
+              <th>Afwijkend traject</th>
+            </tr>
+          </thead>
+
+          <tbody id="companies"></tbody>
+
+        </table>
+
+      </div>
+
+      <div
+        class="footer"
+        id="generated"
+      ></div>
+
+    </section>
+
+  </div>
+
+
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+
+  <script>
+
+    const t =
+      window.TrelloPowerUp.iframe();
+
+    const DASHBOARD_DATA_URL =
+      "https://nktr-trello-guard.marice-angulo.workers.dev/trello/dashboard/data";
+
+
+    function getPeriodConfig(
+      period
+    ) {
+
+      const now =
+        new Date();
+
+
+      if (
+        period ===
+        "week"
+      ) {
+
+        const from =
+          new Date(
+            now
+          );
+
+        const day =
+          from.getDay() ||
+          7;
+
+        from.setHours(
+          0,
+          0,
+          0,
+          0
+        );
+
+        from.setDate(
+          from.getDate() -
+          day +
+          1
+        );
+
+        return {
+          from:
+            from.getTime(),
+          bucket:
+            "day"
+        };
+      }
+
+
+      if (
+        period ===
+        "month"
+      ) {
+
+        const from =
+          new Date(
+            now.getFullYear(),
+            now.getMonth(),
+            1
+          );
+
+        return {
+          from:
+            from.getTime(),
+          bucket:
+            "day"
+        };
+      }
+
+
+      if (
+        period ===
+        "year"
+      ) {
+
+        const from =
+          new Date(
+            now.getFullYear(),
+            0,
+            1
+          );
+
+        return {
+          from:
+            from.getTime(),
+          bucket:
+            "month"
+        };
+      }
+
+
+      return {
+        from:
+          0,
+        bucket:
+          "year"
+      };
+    }
+
+
+    async function loadDashboard(
+      period
+    ) {
+
+      const config =
+        getPeriodConfig(
+          period
+        );
+
+
+      document
+        .querySelectorAll(
+          "#filters button"
+        )
+        .forEach(
+          function(button) {
+
+            button.classList.toggle(
+              "active",
+              button.dataset.period ===
+                period
+            );
+          }
+        );
+
+
+      const jwt =
+        await t.jwt({
+
+          state:
+            JSON.stringify({
+
+              action:
+                "dashboard-data",
+
+              period:
+                period,
+
+              from:
+                config.from,
+
+              bucket:
+                config.bucket
+            })
+        });
+
+
+      const response =
+        await fetch(
+          DASHBOARD_DATA_URL,
+          {
+
+            method:
+              "POST",
+
+            headers: {
+
+              "Authorization":
+                "Bearer " +
+                jwt
+            }
+          }
+        );
+
+
+      const data =
+        await response.json();
+
+
+      if (
+        !response.ok
+      ) {
+        throw new Error(
+          data.error ||
+          "Dashboard laden mislukt"
+        );
+      }
+
+
+      render(
+        data
+      );
+    }
+
+
+    function render(
+      data
+    ) {
+
+      const counts =
+        data.counts ||
+        {};
+
+
+      document
+        .getElementById(
+          "k-onb"
+        )
+        .textContent =
+          counts.onboarding ||
+          0;
+
+
+      document
+        .getElementById(
+          "k-op"
+        )
+        .textContent =
+          counts.operational ||
+          0;
+
+
+      document
+        .getElementById(
+          "k-offb"
+        )
+        .textContent =
+          counts.offboarding ||
+          0;
+
+
+      document
+        .getElementById(
+          "k-out"
+        )
+        .textContent =
+          counts.offboarded ||
+          0;
+
+
+      document
+        .getElementById(
+          "k-dev"
+        )
+        .textContent =
+          counts.afwijkend ||
+          0;
+
+
+      renderMovements(
+        data.movements ||
+        []
+      );
+
+
+      renderReasons(
+        data.reasons ||
+        []
+      );
+
+
+      renderCompanies(
+        data.companies ||
+        []
+      );
+
+
+      document
+        .getElementById(
+          "generated"
+        )
+        .textContent =
+          "Bijgewerkt " +
+          new Date(
+            data.generated_at
+          )
+            .toLocaleString(
+              "nl-NL"
+            );
+    }
+
+
+    function renderMovements(
+      rows
+    ) {
+
+      const host =
+        document.getElementById(
+          "movement"
+        );
+
+
+      if (
+        !rows.length
+      ) {
+
+        host.innerHTML =
+          '<div class="empty">Nog geen geregistreerde bewegingen in deze periode.</div>';
+
+        return;
+      }
+
+
+      const max =
+        Math.max(
+          1,
+          ...rows.flatMap(
+            function(row) {
+
+              return [
+                row.onboarding ||
+                  0,
+                row.offboarding ||
+                  0,
+                row.operational ||
+                  0
+              ];
+            }
+          )
+        );
+
+
+      host.innerHTML =
+        rows.map(
+          function(row) {
+
+            function height(
+              value
+            ) {
+
+              return Math.max(
+                2,
+                Math.round(
+                  (
+                    value /
+                    max
+                  ) *
+                  180
+                )
+              );
+            }
+
+
+            return (
+              '<div class="bucket">' +
+
+                '<div class="bars">' +
+
+                  '<div class="bar onb" data-value="' +
+                    (row.onboarding || 0) +
+                    '" style="height:' +
+                    height(
+                      row.onboarding ||
+                      0
+                    ) +
+                    'px"></div>' +
+
+                  '<div class="bar offb" data-value="' +
+                    (row.offboarding || 0) +
+                    '" style="height:' +
+                    height(
+                      row.offboarding ||
+                      0
+                    ) +
+                    'px"></div>' +
+
+                  '<div class="bar op" data-value="' +
+                    (row.operational || 0) +
+                    '" style="height:' +
+                    height(
+                      row.operational ||
+                      0
+                    ) +
+                    'px"></div>' +
+
+                '</div>' +
+
+                '<div class="bucket-label">' +
+                  escapeHtml(
+                    row.period
+                  ) +
+                '</div>' +
+
+              '</div>'
+            );
+          }
+        )
+          .join("");
+    }
+
+
+    function renderReasons(
+      rows
+    ) {
+
+      const host =
+        document.getElementById(
+          "reasons"
+        );
+
+
+      if (
+        !rows.length
+      ) {
+
+        host.innerHTML =
+          '<div class="empty">Nog geen uitstroomredenen in deze periode.</div>';
+
+        return;
+      }
+
+
+      const max =
+        Math.max(
+          1,
+          ...rows.map(
+            function(row) {
+              return row.count ||
+                0;
+            }
+          )
+        );
+
+
+      host.innerHTML =
+        rows.map(
+          function(row) {
+
+            return (
+              '<div class="reason-row">' +
+
+                '<div>' +
+                  escapeHtml(
+                    row.reason
+                  ) +
+                '</div>' +
+
+                '<div class="track">' +
+                  '<div class="fill" style="width:' +
+                    Math.round(
+                      (
+                        row.count /
+                        max
+                      ) *
+                      100
+                    ) +
+                    '%"></div>' +
+                '</div>' +
+
+                '<div>' +
+                  row.count +
+                '</div>' +
+
+              '</div>'
+            );
+          }
+        )
+          .join("");
+    }
+
+
+    function renderCompanies(
+      rows
+    ) {
+
+      const body =
+        document.getElementById(
+          "companies"
+        );
+
+
+      if (
+        !rows.length
+      ) {
+
+        body.innerHTML =
+          '<tr><td colspan="6" class="empty">Nog geen medewerkergegevens beschikbaar.</td></tr>';
+
+        return;
+      }
+
+
+      body.innerHTML =
+        rows.map(
+          function(row) {
+
+            return (
+              '<tr>' +
+
+                '<td>' +
+                  escapeHtml(
+                    row.company
+                  ) +
+                '</td>' +
+
+                '<td>' +
+                  (row.onboarding || 0) +
+                '</td>' +
+
+                '<td>' +
+                  (row.operational || 0) +
+                '</td>' +
+
+                '<td>' +
+                  (row.offboarding || 0) +
+                '</td>' +
+
+                '<td>' +
+                  (row.offboarded || 0) +
+                '</td>' +
+
+                '<td>' +
+                  (row.afwijkend || 0) +
+                '</td>' +
+
+              '</tr>'
+            );
+          }
+        )
+          .join("");
+    }
+
+
+    function escapeHtml(
+      value
+    ) {
+
+      return String(
+        value ?? ""
+      )
+        .replaceAll(
+          "&",
+          "&amp;"
+        )
+        .replaceAll(
+          "<",
+          "&lt;"
+        )
+        .replaceAll(
+          ">",
+          "&gt;"
+        )
+        .replaceAll(
+          '"',
+          "&quot;"
+        )
+        .replaceAll(
+          "'",
+          "&#039;"
+        );
+    }
+
+
+    document
+      .getElementById(
+        "filters"
+      )
+      .addEventListener(
+        "click",
+        function(event) {
+
+          const button =
+            event.target.closest(
+              "button[data-period]"
+            );
+
+          if (!button) {
+            return;
+          }
+
+
+          loadDashboard(
+            button.dataset.period
+          )
+            .catch(
+              showError
+            );
+        }
+      );
+
+
+    function showError(
+      error
+    ) {
+
+      document
+        .getElementById(
+          "movement"
+        )
+        .innerHTML =
+          '<div class="empty">' +
+          escapeHtml(
+            error.message ||
+            error
+          ) +
+          '</div>';
+    }
+
+
+    loadDashboard(
+      "year"
+    )
+      .catch(
+        showError
+      );
+
+  </script>
+
+</body>
+</html>
