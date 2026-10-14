@@ -20,7 +20,9 @@ const REDIRECT_URI =
 const OFFBOARDING_LIST_ID = "6abfc9b4d6a0cebc239f819e";
 const GUARD_OFFB_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/request";
 const GUARD_DUPLICATE_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/employee/duplicates";
+const GUARD_DUPLICATE_IGNORE_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/employee/duplicates/ignore";
 const GUARD_RESTORE_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/employee/restore";
+const GUARD_SOURCE_WARNING_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/source/warning/status";
 const DASHBOARD_URL = "./dashboard.html";
 const GUARD_ONB_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/onb/request";
 const GUARD_COVER_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/cover/sync";
@@ -408,6 +410,116 @@ async function restoreArchivedDuplicate(
 }
 
 
+async function ignoreDuplicatePair(
+  t,
+  matchCardId
+) {
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "ignore-duplicate",
+          cardId:
+            card.id,
+          matchCardId:
+            matchCardId
+        })
+    });
+
+  const response =
+    await fetch(
+      GUARD_DUPLICATE_IGNORE_URL,
+      {
+        method:
+          "POST",
+        headers: {
+          "Authorization":
+            "Bearer " +
+            jwt
+        },
+        signal:
+          AbortSignal.timeout(
+            20000
+          )
+      }
+    );
+
+  const body =
+    await response.json()
+      .catch(
+        function() {
+          return {};
+        }
+      );
+
+  if (!response.ok) {
+    throw new Error(
+      body.error ||
+      "Geen dubbel opslaan mislukt"
+    );
+  }
+
+  await t.alert({
+    message:
+      "Gemarkeerd als geen dubbel."
+  });
+
+  return t.closePopup();
+}
+
+async function getSourcePermissionWarning(
+  t
+) {
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "source-warning-status",
+          cardId:
+            card.id
+        })
+    });
+
+  const response =
+    await fetch(
+      GUARD_SOURCE_WARNING_URL,
+      {
+        method:
+          "POST",
+        headers: {
+          "Authorization":
+            "Bearer " +
+            jwt
+        },
+        signal:
+          AbortSignal.timeout(
+            10000
+          )
+      }
+    );
+
+  if (!response.ok) {
+    return {
+      active:
+        false
+    };
+  }
+
+  return response.json();
+}
+
 async function openDuplicatePopup(
   t,
   status
@@ -432,13 +544,15 @@ async function openDuplicatePopup(
   }
 
   const items =
-    matches.map(
+    matches.flatMap(
       function(match) {
+
+        const actions = [];
 
         if (
           match.archived
         ) {
-          return {
+          actions.push({
             text:
               "Herstellen uit archief · " +
               match.name,
@@ -451,32 +565,49 @@ async function openDuplicatePopup(
                   match.id
                 );
               }
-          };
+          });
+        } else {
+          actions.push({
+            text:
+              "Actieve kaart · " +
+              match.name,
+
+            callback:
+              function(t) {
+
+                if (
+                  match.url
+                ) {
+                  return t.navigate({
+                    url:
+                      match.url
+                  });
+                }
+
+                return t.alert({
+                  message:
+                    match.name
+                });
+              }
+          });
         }
 
-        return {
+        actions.push({
           text:
-            "Actieve kaart · " +
+            "Geen dubbel · " +
             match.name,
 
           callback:
             function(t) {
 
-              if (
-                match.url
-              ) {
-                return t.navigate({
-                  url:
-                    match.url
-                });
-              }
-
-              return t.alert({
-                message:
-                  match.name
-              });
+              return ignoreDuplicatePair(
+                t,
+                match.id
+              );
             }
-        };
+        });
+
+        return actions;
       }
     );
 
@@ -1339,6 +1470,30 @@ window.TrelloPowerUp.initialize({
         const badges = [];
 
 
+        try {
+          const sourceWarning =
+            await getSourcePermissionWarning(
+              t
+            );
+
+          if (sourceWarning.active) {
+            badges.push({
+              title:
+                "Beveiligde bronkaart",
+              text:
+                "🔒 Alleen beheerders",
+              color:
+                "purple"
+            });
+          }
+        } catch (error) {
+          console.error(
+            "Bronkaart-waarschuwing mislukt:",
+            error
+          );
+        }
+
+
         const duplicateCompany =
           await isDuplicateCompanyTemplate(
             t
@@ -1591,6 +1746,30 @@ window.TrelloPowerUp.initialize({
 
           dynamic:
             async function() {
+
+
+              try {
+                const sourceWarning =
+                  await getSourcePermissionWarning(
+                    t
+                  );
+
+                if (sourceWarning.active) {
+                  return {
+                    text:
+                      "🔒 Alleen beheerders",
+                    color:
+                      "purple",
+                    refresh:
+                      10
+                  };
+                }
+              } catch (error) {
+                console.error(
+                  "Bronkaart-waarschuwing mislukt:",
+                  error
+                );
+              }
 
 
               const duplicateCompany =
