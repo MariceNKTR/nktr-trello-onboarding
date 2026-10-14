@@ -547,12 +547,27 @@ async function hasOnboardingChecklist(t) {
   return (
     card.checklists || []
   ).some(
-    checklist =>
-      !/^OFFB\s*\|/i.test(
+    checklist => {
+
+      const name =
         String(
           checklist.name || ""
-        )
-      )
+        ).trim();
+
+      /*
+       * Current OFFB checklists and archived OFFB history are not
+       * onboarding. A reactivated employee with only OFFB history
+       * must still get the "Onboarding laden" action.
+       */
+      if (
+        /^OFFB\s*\|/i.test(name) ||
+        /^HISTORIE\s*\|\s*OFFB\s*\|/i.test(name)
+      ) {
+        return false;
+      }
+
+      return true;
+    }
   );
 }
 
