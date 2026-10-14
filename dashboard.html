@@ -376,6 +376,16 @@
 
       <div class="card">
         <div class="kpi-label">
+          Archief
+        </div>
+        <div
+          class="kpi-value"
+          id="k-archive"
+        >–</div>
+      </div>
+
+      <div class="card">
+        <div class="kpi-label">
           Afwijkend traject
         </div>
         <div
@@ -451,7 +461,7 @@
       </h2>
 
       <p class="section-sub">
-        Huidige status per medewerker. Afwijkend traject is een extra indicator en kan naast een huidige status voorkomen.
+        Huidige status per medewerker. Archief telt alleen opgeschoonde, herkenbare medewerkerkaarten die nog in Trello bestaan. Afwijkend traject is een extra indicator en kan naast een huidige status voorkomen.
       </p>
 
       <div style="overflow-x:auto">
@@ -718,6 +728,15 @@
         )
         .textContent =
           counts.offboarded ||
+          0;
+
+
+      document
+        .getElementById(
+          "k-archive"
+        )
+        .textContent =
+          counts.archive ||
           0;
 
 
