@@ -685,13 +685,64 @@ async function requestImmediateOffboarding(
             company || null,
         }),
     });
-  const response = await fetch(GUARD_OFFB_URL, {
-    method: "POST",
-    headers: { Authorization: "Bearer " + jwt },
-    signal: AbortSignal.timeout(20000),
-  });
-  if (!response.ok) throw new Error("Direct laden is niet gelukt; automatisch opnieuw proberen volgt.");
-  return response.json();
+
+  let result = null;
+
+  for (
+    let attempt = 0;
+    attempt < 3;
+    attempt++
+  ) {
+    const response =
+      await fetch(
+        GUARD_OFFB_URL,
+        {
+          method:
+            "POST",
+
+          headers: {
+            Authorization:
+              "Bearer " +
+              jwt,
+          },
+
+          signal:
+            AbortSignal.timeout(
+              20000
+            ),
+        }
+      );
+
+    result =
+      await response.json();
+
+    if (
+      response.ok &&
+      result.status !==
+        "RETRY_PENDING"
+    ) {
+      return result;
+    }
+
+    if (
+      attempt < 2
+    ) {
+      await new Promise(
+        resolve =>
+          setTimeout(
+            resolve,
+            700
+          )
+      );
+    }
+  }
+
+  return (
+    result || {
+      status:
+        "RETRY_PENDING"
+    }
+  );
 }
 
 
