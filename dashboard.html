@@ -79,7 +79,7 @@
 
     .kpis {
       display: grid;
-      grid-template-columns: repeat(3, minmax(145px, 1fr));
+      grid-template-columns: repeat(4, minmax(145px, 1fr));
       gap: 12px;
       margin-bottom: 16px;
     }
@@ -188,15 +188,30 @@
     }
 
     .bar.onb {
-      background: #579dff;
+      background: linear-gradient(
+        180deg,
+        rgba(87, 157, 255, 0.88) 0%,
+        rgba(87, 157, 255, 0.24) 100%
+      );
+      border: 1px solid rgba(87, 157, 255, 0.40);
     }
 
     .bar.offb {
-      background: #f87168;
+      background: linear-gradient(
+        180deg,
+        rgba(248, 113, 104, 0.88) 0%,
+        rgba(248, 113, 104, 0.24) 100%
+      );
+      border: 1px solid rgba(248, 113, 104, 0.40);
     }
 
     .bar.op {
-      background: #4bce97;
+      background: linear-gradient(
+        180deg,
+        rgba(75, 206, 151, 0.88) 0%,
+        rgba(75, 206, 151, 0.24) 100%
+      );
+      border: 1px solid rgba(75, 206, 151, 0.40);
     }
 
     .bar:hover::after {
@@ -346,6 +361,16 @@
 
       <div class="card">
         <div class="kpi-label">
+          Onboarded
+        </div>
+        <div
+          class="kpi-value"
+          id="k-onboarded"
+        >–</div>
+      </div>
+
+      <div class="card">
+        <div class="kpi-label">
           Operationeel
         </div>
         <div
@@ -461,7 +486,7 @@
       </h2>
 
       <p class="section-sub">
-        Huidige status per medewerker. Archief telt alleen opgeschoonde, herkenbare medewerkerkaarten die nog in Trello bestaan. Afwijkend traject is een extra indicator en kan naast een huidige status voorkomen.
+        Huidige status per medewerker. Onboarded telt medewerkers die minimaal één keer Fully Operational hebben bereikt. Archief telt alleen opgeschoonde, herkenbare medewerkerkaarten die nog in Trello bestaan. Afwijkend traject is een extra indicator en kan naast een huidige status voorkomen.
       </p>
 
       <div style="overflow-x:auto">
@@ -472,6 +497,7 @@
             <tr>
               <th>Bedrijf</th>
               <th>Onboarding</th>
+              <th>Onboarded</th>
               <th>Operationeel</th>
               <th>Uitstroom</th>
               <th>Uitgestroomd</th>
@@ -701,6 +727,15 @@
         )
         .textContent =
           counts.onboarding ||
+          0;
+
+
+      document
+        .getElementById(
+          "k-onboarded"
+        )
+        .textContent =
+          counts.onboarded ||
           0;
 
 
@@ -976,7 +1011,7 @@
       ) {
 
         body.innerHTML =
-          '<tr><td colspan="6" class="empty">Nog geen medewerkergegevens beschikbaar.</td></tr>';
+          '<tr><td colspan="7" class="empty">Nog geen medewerkergegevens beschikbaar.</td></tr>';
 
         return;
       }
@@ -997,6 +1032,10 @@
 
                 '<td>' +
                   (row.onboarding || 0) +
+                '</td>' +
+
+                '<td>' +
+                  (row.onboarded || 0) +
                 '</td>' +
 
                 '<td>' +
@@ -1098,6 +1137,13 @@
           '</div>';
     }
 
+
+    document
+      .getElementById(
+        "generated"
+      )
+      .textContent =
+        "Dashboard laden…";
 
     loadDashboard(
       "year"
