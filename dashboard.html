@@ -2,1157 +2,1998 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>NKTR Dashboard</title>
-
-  <style>
-    :root {
-      color-scheme: light dark;
-      --bg: #f4f5f7;
-      --panel: #ffffff;
-      --text: #172b4d;
-      --muted: #6b778c;
-      --line: #dfe1e6;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #1d2125;
-        --panel: #22272b;
-        --text: #f1f2f4;
-        --muted: #9fadbc;
-        --line: #454f59;
-      }
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
-
-    .wrap {
-      max-width: 1500px;
-      margin: 0 auto;
-      padding: 24px;
-    }
-
-    .top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 18px;
-    }
-
-    h1 {
-      margin: 0;
-      font-size: 24px;
-    }
-
-    .filters {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-
-    button {
-      border: 1px solid var(--line);
-      background: var(--panel);
-      color: var(--text);
-      border-radius: 8px;
-      padding: 8px 12px;
-      cursor: pointer;
-      font-weight: 600;
-    }
-
-    button.active {
-      background: var(--text);
-      color: var(--panel);
-      border-color: var(--text);
-    }
-
-    .kpis {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(145px, 1fr));
-      gap: 12px;
-      margin-bottom: 16px;
-    }
-
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 16px;
-    }
-
-    .kpi-label {
-      color: var(--muted);
-      font-size: 13px;
-      margin-bottom: 8px;
-    }
-
-    .kpi-value {
-      font-size: 30px;
-      font-weight: 750;
-      line-height: 1;
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: 1.7fr 1fr;
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-
-    .section-title {
-      margin: 0 0 4px;
-      font-size: 16px;
-    }
-
-    .section-sub {
-      margin: 0 0 16px;
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    .legend {
-      display: flex;
-      gap: 16px;
-      color: var(--muted);
-      font-size: 12px;
-      margin-bottom: 12px;
-    }
-
-    .legend span::before {
-      content: "";
-      display: inline-block;
-      width: 10px;
-      height: 10px;
-      margin-right: 6px;
-      border-radius: 2px;
-      background: currentColor;
-    }
-
-    .legend .onb {
-      color: #579dff;
-    }
-
-    .legend .offb {
-      color: #f87168;
-    }
-
-    .legend .op {
-      color: #4bce97;
-    }
-
-    .chart {
-      min-height: 280px;
-      display: flex;
-      align-items: end;
-      gap: 10px;
-      overflow-x: auto;
-      padding: 12px 4px 28px;
-      border-top: 1px solid var(--line);
-      border-bottom: 1px solid var(--line);
-    }
-
-    .bucket {
-      min-width: 54px;
-      flex: 1 0 54px;
-      height: 220px;
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      justify-content: end;
-    }
-
-    .bars {
-      height: 190px;
-      display: flex;
-      align-items: end;
-      justify-content: center;
-      gap: 4px;
-    }
-
-    .bar {
-      width: 28%;
-      min-height: 2px;
-      position: relative;
-      border-radius: 4px 4px 0 0;
-    }
-
-    .bar.onb {
-      background: linear-gradient(
-        180deg,
-        rgba(87, 157, 255, 0.88) 0%,
-        rgba(87, 157, 255, 0.24) 100%
-      );
-      border: 1px solid rgba(87, 157, 255, 0.40);
-    }
-
-    .bar.offb {
-      background: linear-gradient(
-        180deg,
-        rgba(248, 113, 104, 0.88) 0%,
-        rgba(248, 113, 104, 0.24) 100%
-      );
-      border: 1px solid rgba(248, 113, 104, 0.40);
-    }
-
-    .bar.op {
-      background: linear-gradient(
-        180deg,
-        rgba(75, 206, 151, 0.88) 0%,
-        rgba(75, 206, 151, 0.24) 100%
-      );
-      border: 1px solid rgba(75, 206, 151, 0.40);
-    }
-
-    .bar:hover::after {
-      content: attr(data-value);
-      position: absolute;
-      bottom: calc(100% + 4px);
-      left: 50%;
-      transform: translateX(-50%);
-      background: var(--text);
-      color: var(--panel);
-      padding: 2px 5px;
-      border-radius: 4px;
-      font-size: 11px;
-    }
-
-    .bucket-label {
-      position: absolute;
-      bottom: -23px;
-      width: 100%;
-      text-align: center;
-      color: var(--muted);
-      font-size: 11px;
-    }
-
-    .reason-row {
-      display: grid;
-      grid-template-columns: minmax(110px, 1fr) 2fr 34px;
-      gap: 10px;
-      align-items: center;
-      margin: 10px 0;
-      font-size: 13px;
-    }
-
-    .track {
-      height: 9px;
-      overflow: hidden;
-      background: var(--line);
-      border-radius: 999px;
-    }
-
-    .fill {
-      height: 100%;
-      background: #6554c0;
-      border-radius: 999px;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-
-    th,
-    td {
-      padding: 10px 8px;
-      text-align: right;
-      border-bottom: 1px solid var(--line);
-    }
-
-    th:first-child,
-    td:first-child {
-      text-align: left;
-    }
-
-    th {
-      color: var(--muted);
-      font-weight: 650;
-    }
-
-    .empty {
-      color: var(--muted);
-      padding: 24px 0;
-      text-align: center;
-      font-size: 13px;
-    }
-
-    .footer {
-      margin-top: 10px;
-      color: var(--muted);
-      text-align: right;
-      font-size: 11px;
-    }
-
-    @media (max-width: 1000px) {
-      .kpis {
-        grid-template-columns: repeat(2, 1fr);
-      }
-
-      .grid {
-        grid-template-columns: 1fr;
-      }
-
-      .top {
-        align-items: flex-start;
-        flex-direction: column;
-      }
-    }
-  </style>
+  <title>NKTR Onboarding</title>
 </head>
 
 <body>
 
-  <div class="wrap">
+<script src="https://p.trellocdn.com/power-up.min.js"></script>
 
-    <div class="top">
+<script>
 
-      <h1>NKTR Dashboard</h1>
+const CLIENT_ID =
+  "VGpJ9UId4pH0TheoJUoTuVczLidyM3IQ";
 
-      <div
-        class="filters"
-        id="filters"
-      >
-        <button data-period="week">
-          Deze week
-        </button>
+const REDIRECT_URI =
+  "https://maricenktr.github.io/nktr-trello-onboarding/oauth-callback.html";
 
-        <button data-period="month">
-          Deze maand
-        </button>
+const OFFBOARDING_LIST_ID = "6abfc9b4d6a0cebc239f819e";
+const GUARD_OFFB_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/request";
+const GUARD_DUPLICATE_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/employee/duplicates";
+const GUARD_DUPLICATE_IGNORE_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/employee/duplicates/ignore";
+const GUARD_RESTORE_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/employee/restore";
+const GUARD_SOURCE_WARNING_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/source/warning/status";
+const DASHBOARD_URL = "./dashboard.html";
+const GUARD_ONB_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/onb/request";
+const GUARD_COVER_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/cover/sync";
+const GUARD_REASON_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/reason";
+const GUARD_REASON_STATUS_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/reason/status";
 
-        <button
-          data-period="year"
-          class="active"
-        >
-          Dit jaar
-        </button>
+const TOTAL_PROGRESS_BLOCKS = 10;
 
-        <button data-period="all">
-          Alles
-        </button>
-      </div>
+const FULLY_OPERATIONAL_LIST =
+  "Fully Operational";
 
-    </div>
+const INACTIVE_LABEL =
+  "inactief";
 
 
-    <div class="kpis">
+/* =========================================================
+   TEMPLATE DETECTION
+   ========================================================= */
 
-      <div class="card">
-        <div class="kpi-label">
-          Onboarding
-        </div>
-        <div
-          class="kpi-value"
-          id="k-onb"
-        >–</div>
-      </div>
+function getCompanyFromSourceCardName(name) {
 
-      <div class="card">
-        <div class="kpi-label">
-          Onboarded
-        </div>
-        <div
-          class="kpi-value"
-          id="k-onboarded"
-        >–</div>
-      </div>
+  const match = (name || "").match(
+    /^🔒︎\s*ONB\s*\|\s*(.+?)\s*\|\s*Stappenbron$/i
+  );
 
-      <div class="card">
-        <div class="kpi-label">
-          Operationeel
-        </div>
-        <div
-          class="kpi-value"
-          id="k-op"
-        >–</div>
-      </div>
+  if (!match) {
+    return null;
+  }
 
-      <div class="card">
-        <div class="kpi-label">
-          Uitstroom
-        </div>
-        <div
-          class="kpi-value"
-          id="k-offb"
-        >–</div>
-      </div>
-
-      <div class="card">
-        <div class="kpi-label">
-          Uitgestroomd
-        </div>
-        <div
-          class="kpi-value"
-          id="k-out"
-        >–</div>
-      </div>
-
-      <div class="card">
-        <div class="kpi-label">
-          Archief
-        </div>
-        <div
-          class="kpi-value"
-          id="k-archive"
-        >–</div>
-      </div>
-
-      <div class="card">
-        <div class="kpi-label">
-          Afwijkend traject
-        </div>
-        <div
-          class="kpi-value"
-          id="k-dev"
-        >–</div>
-      </div>
-
-    </div>
+  return match[1].trim();
+}
 
 
-    <div class="grid">
+function normalizeCompany(company) {
 
-      <section class="card">
-
-        <h2 class="section-title">
-          Bewegingen
-        </h2>
-
-        <p class="section-sub">
-          Unieke medewerkerkaarten per gekozen periode. Herhaalde bewegingen van dezelfde kaart tellen niet dubbel.
-        </p>
-
-        <div class="legend">
-          <span class="onb">
-            Onboarding
-          </span>
-          <span class="offb">
-            Uitstroom
-          </span>
-          <span class="op">
-            Operationeel
-          </span>
-        </div>
-
-        <div
-          id="movement"
-          class="chart"
-        >
-          <div class="empty">
-            Laden…
-          </div>
-        </div>
-
-      </section>
+  return (company || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
 
 
-      <section class="card">
+function normalizeLabel(labelName) {
 
-        <h2 class="section-title">
-          Uitstroomredenen
-        </h2>
-
-        <p class="section-sub">
-          Laatste geregistreerde reden per medewerker binnen de gekozen periode.
-        </p>
-
-        <div id="reasons">
-          <div class="empty">
-            Laden…
-          </div>
-        </div>
-
-      </section>
-
-    </div>
+  return (labelName || "")
+    .trim()
+    .toLowerCase();
+}
 
 
-    <section class="card">
+function hasInactiveLabel(labels) {
 
-      <h2 class="section-title">
-        Per bedrijf
-      </h2>
+  return (labels || []).some(
+    function(label) {
 
-      <p class="section-sub">
-        Huidige status per medewerker. Onboarded telt medewerkers die minimaal één keer Fully Operational hebben bereikt. Archief telt alleen opgeschoonde, herkenbare medewerkerkaarten die nog in Trello bestaan. Afwijkend traject is een extra indicator en kan naast een huidige status voorkomen.
-      </p>
-
-      <div style="overflow-x:auto">
-
-        <table>
-
-          <thead>
-            <tr>
-              <th>Bedrijf</th>
-              <th>Onboarding</th>
-              <th>Onboarded</th>
-              <th>Operationeel</th>
-              <th>Uitstroom</th>
-              <th>Uitgestroomd</th>
-              <th>Afwijkend traject</th>
-            </tr>
-          </thead>
-
-          <tbody id="companies"></tbody>
-
-        </table>
-
-      </div>
-
-      <div
-        class="footer"
-        id="generated"
-      ></div>
-
-    </section>
-
-  </div>
+      return (
+        normalizeLabel(label.name) ===
+        INACTIVE_LABEL
+      );
+    }
+  );
+}
 
 
-  <script src="https://p.trellocdn.com/power-up.min.js"></script>
-
-  <script>
-
-    const t =
-      window.TrelloPowerUp.iframe();
-
-    const DASHBOARD_DATA_URL =
-      "https://nktr-trello-guard.marice-angulo.workers.dev/trello/dashboard/data";
+function isOffboardingSourceCardName(name) {
+  return /^🔒︎\s*OFFB\s*\|\s*Stappenbron$/i.test(
+    String(name || "").trim()
+  );
+}
 
 
-    function getPeriodConfig(
-      period
-    ) {
+function isSourceCard(card) {
 
-      const now =
-        new Date();
+  return (
+    !!getCompanyFromSourceCardName(
+      card.name
+    ) ||
+    isOffboardingSourceCardName(
+      card.name
+    )
+  );
+}
 
 
-      if (
-        period ===
-        "week"
-      ) {
+/* =========================================================
+   SEPARATOR CARDS
+   ========================================================= */
 
-        const from =
-          new Date(
-            now
-          );
+function isSeparatorCard(card) {
 
-        const day =
-          from.getDay() ||
-          7;
+  const name =
+    (card && card.name)
+      ? card.name.trim()
+      : "";
 
-        from.setHours(
-          0,
-          0,
-          0,
-          0
+  return (
+    name.startsWith("──") ||
+    /^↓{2,}/.test(name)
+  );
+}
+
+
+async function getSourceCards(t) {
+
+  const cards = await t.cards(
+    "id",
+    "name",
+    "checklists",
+    "labels"
+  );
+
+  return cards
+
+    .map(function(card) {
+
+      const company =
+        getCompanyFromSourceCardName(
+          card.name
         );
 
-        from.setDate(
-          from.getDate() -
-          day +
-          1
-        );
-
-        return {
-          from:
-            from.getTime(),
-          bucket:
-            "day"
-        };
+      if (!company) {
+        return null;
       }
-
-
-      if (
-        period ===
-        "month"
-      ) {
-
-        const from =
-          new Date(
-            now.getFullYear(),
-            now.getMonth(),
-            1
-          );
-
-        return {
-          from:
-            from.getTime(),
-          bucket:
-            "day"
-        };
-      }
-
-
-      if (
-        period ===
-        "year"
-      ) {
-
-        const from =
-          new Date(
-            now.getFullYear(),
-            0,
-            1
-          );
-
-        return {
-          from:
-            from.getTime(),
-          bucket:
-            "month"
-        };
-      }
-
 
       return {
-        from:
-          0,
-        bucket:
-          "year"
+
+        id:
+          card.id,
+
+        name:
+          card.name,
+
+        company:
+          company,
+
+        companyKey:
+          normalizeCompany(company),
+
+        checklists:
+          card.checklists || [],
+
+        labels:
+          card.labels || [],
+
+        inactive:
+          hasInactiveLabel(
+            card.labels || []
+          )
       };
-    }
+    })
+
+    .filter(Boolean)
+
+    .sort(function(a, b) {
+
+      return a.company.localeCompare(
+        b.company
+      );
+    });
+}
 
 
-    async function loadDashboard(
-      period
-    ) {
+/* =========================================================
+   TEMPLATE HEALTH
+   ========================================================= */
 
-      const config =
-        getPeriodConfig(
-          period
-        );
+async function isTemplateEmpty(t) {
 
+  const result =
+    await t.card(
+      "checklists"
+    );
 
-      document
-        .querySelectorAll(
-          "#filters button"
-        )
-        .forEach(
-          function(button) {
+  const checklists =
+    result.checklists || [];
 
-            button.classList.toggle(
-              "active",
-              button.dataset.period ===
-                period
-            );
-          }
-        );
+  return checklists.length === 0;
+}
 
 
-      const jwt =
-        await t.jwt({
+/* =========================================================
+   DUPLICATE COMPANY / TEMPLATE DETECTION
+   ========================================================= */
 
-          state:
-            JSON.stringify({
+async function isDuplicateCompanyTemplate(t) {
 
-              action:
-                "dashboard-data",
+  const currentCard =
+    await t.card(
+      "name"
+    );
 
-              period:
-                period,
+  const company =
+    getCompanyFromSourceCardName(
+      currentCard.name
+    );
 
-              from:
-                config.from,
+  if (!company) {
+    return false;
+  }
 
-              bucket:
-                config.bucket
-            })
-        });
+  const companyKey =
+    normalizeCompany(company);
 
+  const sourceCards =
+    await getSourceCards(t);
 
-      const response =
-        await fetch(
-          DASHBOARD_DATA_URL,
-          {
+  const matches =
+    sourceCards.filter(
+      function(source) {
 
-            method:
-              "POST",
-
-            headers: {
-
-              "Authorization":
-                "Bearer " +
-                jwt
-            }
-          }
-        );
-
-
-      const data =
-        await response.json();
-
-
-      if (
-        !response.ok
-      ) {
-        throw new Error(
-          data.error ||
-          "Dashboard laden mislukt"
+        return (
+          source.companyKey ===
+          companyKey
         );
       }
+    );
+
+  return matches.length > 1;
+}
 
 
-      render(
-        data
-      );
-    }
+/* =========================================================
+   EMPLOYEE NAME NORMALIZATION
+   ========================================================= */
+
+function normalizeName(name) {
+
+  return (name || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
 
 
-    function render(
-      data
-    ) {
+function getNameParts(name) {
 
-      const counts =
-        data.counts ||
-        {};
+  const normalized =
+    normalizeName(name);
 
+  if (!normalized) {
+    return [];
+  }
 
-      document
-        .getElementById(
-          "k-onb"
-        )
-        .textContent =
-          counts.onboarding ||
-          0;
+  return normalized.split(" ");
+}
 
 
-      document
-        .getElementById(
-          "k-onboarded"
-        )
-        .textContent =
-          counts.onboarded ||
-          0;
+/* =========================================================
+   EMPLOYEE DUPLICATE CHECK
+   Guard checks open + archived employee cards.
+   ========================================================= */
 
+async function getDuplicateStatus(
+  t
+) {
+  const card =
+    await t.card(
+      "id",
+      "name"
+    );
 
-      document
-        .getElementById(
-          "k-op"
-        )
-        .textContent =
-          counts.operational ||
-          0;
-
-
-      document
-        .getElementById(
-          "k-offb"
-        )
-        .textContent =
-          counts.offboarding ||
-          0;
-
-
-      document
-        .getElementById(
-          "k-out"
-        )
-        .textContent =
-          counts.offboarded ||
-          0;
-
-
-      document
-        .getElementById(
-          "k-archive"
-        )
-        .textContent =
-          counts.archive ||
-          0;
-
-
-      document
-        .getElementById(
-          "k-dev"
-        )
-        .textContent =
-          counts.afwijkend ||
-          0;
-
-
-      renderMovements(
-        data.movements ||
+  if (
+    isSourceCard(
+      card
+    ) ||
+    isSeparatorCard(
+      card
+    )
+  ) {
+    return {
+      duplicate:
+        false,
+      matches:
         []
-      );
+    };
+  }
 
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "duplicate-check",
+          cardId:
+            card.id
+        })
+    });
 
-      renderReasons(
-        data.reasons ||
-        []
-      );
-
-
-      renderCompanies(
-        data.companies ||
-        []
-      );
-
-
-      document
-        .getElementById(
-          "generated"
-        )
-        .textContent =
-          "Bijgewerkt " +
-          new Date(
-            data.generated_at
+  const response =
+    await fetch(
+      GUARD_DUPLICATE_URL,
+      {
+        method:
+          "POST",
+        headers: {
+          "Authorization":
+            "Bearer " +
+            jwt
+        },
+        signal:
+          AbortSignal.timeout(
+            20000
           )
-            .toLocaleString(
-              "nl-NL"
-            );
-    }
-
-
-    function renderMovements(
-      rows
-    ) {
-
-      const host =
-        document.getElementById(
-          "movement"
-        );
-
-
-      if (
-        !rows.length
-      ) {
-
-        host.innerHTML =
-          '<div class="empty">Nog geen geregistreerde bewegingen in deze periode.</div>';
-
-        return;
       }
+    );
+
+  if (
+    !response.ok
+  ) {
+    throw new Error(
+      "Dubbelcontrole mislukt"
+    );
+  }
+
+  return response.json();
+}
 
 
-      const max =
-        Math.max(
-          1,
-          ...rows.flatMap(
-            function(row) {
+async function restoreArchivedDuplicate(
+  t,
+  restoreCardId
+) {
+  const card =
+    await t.card(
+      "id"
+    );
 
-              return [
-                row.onboarding ||
-                  0,
-                row.offboarding ||
-                  0,
-                row.operational ||
-                  0
-              ];
-            }
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "restore-archived",
+          cardId:
+            card.id,
+          restoreCardId:
+            restoreCardId
+        })
+    });
+
+  const response =
+    await fetch(
+      GUARD_RESTORE_URL,
+      {
+        method:
+          "POST",
+        headers: {
+          "Authorization":
+            "Bearer " +
+            jwt
+        },
+        signal:
+          AbortSignal.timeout(
+            20000
           )
-        );
+      }
+    );
+
+  const body =
+    await response.json()
+      .catch(
+        function() {
+          return {};
+        }
+      );
+
+  if (
+    !response.ok
+  ) {
+    throw new Error(
+      body.error ||
+      "Herstellen uit archief mislukt"
+    );
+  }
+
+  await t.alert({
+    message:
+      "Oude medewerkerkaart hersteld; nieuwe dubbele kaart gearchiveerd."
+  });
+
+  return t.closePopup();
+}
 
 
-      host.innerHTML =
-        rows.map(
-          function(row) {
+async function ignoreDuplicatePair(
+  t,
+  matchCardId
+) {
+  const card =
+    await t.card(
+      "id"
+    );
 
-            function height(
-              value
-            ) {
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "ignore-duplicate",
+          cardId:
+            card.id,
+          matchCardId:
+            matchCardId
+        })
+    });
 
-              return Math.max(
-                2,
-                Math.round(
-                  (
-                    value /
-                    max
-                  ) *
-                  180
-                )
+  const response =
+    await fetch(
+      GUARD_DUPLICATE_IGNORE_URL,
+      {
+        method:
+          "POST",
+        headers: {
+          "Authorization":
+            "Bearer " +
+            jwt
+        },
+        signal:
+          AbortSignal.timeout(
+            20000
+          )
+      }
+    );
+
+  const body =
+    await response.json()
+      .catch(
+        function() {
+          return {};
+        }
+      );
+
+  if (!response.ok) {
+    throw new Error(
+      body.error ||
+      "Geen dubbel opslaan mislukt"
+    );
+  }
+
+  await t.alert({
+    message:
+      "Gemarkeerd als geen dubbel."
+  });
+
+  return t.closePopup();
+}
+
+async function getSourcePermissionWarning(
+  t
+) {
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "source-warning-status",
+          cardId:
+            card.id
+        })
+    });
+
+  const response =
+    await fetch(
+      GUARD_SOURCE_WARNING_URL,
+      {
+        method:
+          "POST",
+        headers: {
+          "Authorization":
+            "Bearer " +
+            jwt
+        },
+        signal:
+          AbortSignal.timeout(
+            10000
+          )
+      }
+    );
+
+  if (!response.ok) {
+    return {
+      active:
+        false
+    };
+  }
+
+  return response.json();
+}
+
+async function openDuplicatePopup(
+  t,
+  status
+) {
+  const result =
+    status ||
+    await getDuplicateStatus(
+      t
+    );
+
+  const matches =
+    result.matches ||
+    [];
+
+  if (
+    !matches.length
+  ) {
+    return t.alert({
+      message:
+        "Geen mogelijke dubbele medewerker gevonden."
+    });
+  }
+
+  const items =
+    matches.flatMap(
+      function(match) {
+
+        const actions = [];
+
+        if (
+          match.archived
+        ) {
+          actions.push({
+            text:
+              "Herstellen uit archief · " +
+              match.name,
+
+            callback:
+              function(t) {
+
+                return restoreArchivedDuplicate(
+                  t,
+                  match.id
+                );
+              }
+          });
+        } else {
+          actions.push({
+            text:
+              "Actieve kaart · " +
+              match.name,
+
+            callback:
+              function(t) {
+
+                if (
+                  match.url
+                ) {
+                  return t.navigate({
+                    url:
+                      match.url
+                  });
+                }
+
+                return t.alert({
+                  message:
+                    match.name
+                });
+              }
+          });
+        }
+
+        actions.push({
+          text:
+            "Geen dubbel · " +
+            match.name,
+
+          callback:
+            function(t) {
+
+              return ignoreDuplicatePair(
+                t,
+                match.id
               );
             }
+        });
+
+        return actions;
+      }
+    );
+
+  return t.popup({
+    title:
+      "⚠ MOGELIJK DUBBEL",
+
+    items:
+      items
+  });
+}
 
 
-            return (
-              '<div class="bucket">' +
+/* =========================================================
+   CHECKLIST PROGRESS
+   ========================================================= */
 
-                '<div class="bars">' +
+async function getChecklistProgress(t) {
 
-                  '<div class="bar onb" data-value="' +
-                    (row.onboarding || 0) +
-                    '" style="height:' +
-                    height(
-                      row.onboarding ||
-                      0
-                    ) +
-                    'px"></div>' +
+  const card =
+    await t.card(
+      "badges"
+    );
 
-                  '<div class="bar offb" data-value="' +
-                    (row.offboarding || 0) +
-                    '" style="height:' +
-                    height(
-                      row.offboarding ||
-                      0
-                    ) +
-                    'px"></div>' +
+  const cardBadges =
+    card.badges || {};
 
-                  '<div class="bar op" data-value="' +
-                    (row.operational || 0) +
-                    '" style="height:' +
-                    height(
-                      row.operational ||
-                      0
-                    ) +
-                    'px"></div>' +
+  return {
 
-                '</div>' +
+    total:
+      cardBadges.checkItems || 0,
 
-                '<div class="bucket-label">' +
-                  escapeHtml(
-                    row.period
-                  ) +
-                '</div>' +
-
-              '</div>'
-            );
-          }
-        )
-          .join("");
-    }
+    completed:
+      cardBadges.checkItemsChecked || 0
+  };
+}
 
 
-    function renderReasons(
-      rows
-    ) {
+async function getProgressBar(t) {
 
-      const host =
-        document.getElementById(
-          "reasons"
-        );
+  const progress =
+    await getChecklistProgress(t);
+
+  if (progress.total === 0) {
+    return "";
+  }
+
+  const filled =
+    Math.round(
+      (
+        progress.completed /
+        progress.total
+      ) *
+      TOTAL_PROGRESS_BLOCKS
+    );
+
+  return (
+    "█".repeat(filled) +
+    "-".repeat(
+      TOTAL_PROGRESS_BLOCKS -
+      filled
+    )
+  );
+}
 
 
+async function hasIncompleteSteps(t) {
+
+  const progress =
+    await getChecklistProgress(t);
+
+  if (progress.total === 0) {
+    return false;
+  }
+
+  return (
+    progress.completed <
+    progress.total
+  );
+}
+
+
+async function hasNoChecklistItems(t) {
+
+  const progress =
+    await getChecklistProgress(t);
+
+  return progress.total === 0;
+}
+
+
+async function hasOnboardingChecklist(t) {
+
+  const card =
+    await t.card(
+      "checklists"
+    );
+
+  return (
+    card.checklists || []
+  ).some(
+    checklist => {
+
+      const name =
+        String(
+          checklist.name || ""
+        ).trim();
+
+      /*
+       * Current OFFB checklists and archived OFFB history are not
+       * onboarding. A reactivated employee with only OFFB history
+       * must still get the "Onboarding laden" action.
+       */
       if (
-        !rows.length
+        /^OFFB\s*\|/i.test(name) ||
+        /^HISTORIE\s*\|\s*OFFB\s*\|/i.test(name)
       ) {
-
-        host.innerHTML =
-          '<div class="empty">Nog geen uitstroomredenen in deze periode.</div>';
-
-        return;
+        return false;
       }
 
+      return true;
+    }
+  );
+}
 
-      const max =
-        Math.max(
-          1,
-          ...rows.map(
-            function(row) {
-              return row.count ||
-                0;
+
+/* =========================================================
+   CARD COVER
+   ========================================================= */
+
+async function requestImmediateCoverSync(t) {
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "sync-cover",
+          cardId:
+            card.id,
+        }),
+    });
+
+  const response =
+    await fetch(
+      GUARD_COVER_URL,
+      {
+        method:
+          "POST",
+
+        headers: {
+          Authorization:
+            "Bearer " +
+            jwt,
+        },
+
+        signal:
+          AbortSignal.timeout(
+            20000
+          ),
+      }
+    );
+
+  const result =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      result.error ||
+      "Omslagsynchronisatie mislukt"
+    );
+  }
+
+  return result;
+}
+
+
+async function syncOperationalCover(t) {
+
+  try {
+
+    const card =
+      await t.card(
+        "name"
+      );
+
+    if (
+      isSourceCard(card) ||
+      isSeparatorCard(card)
+    ) {
+      return;
+    }
+
+    await requestImmediateCoverSync(t);
+
+  } catch (error) {
+
+    console.error(
+      "Omslagsynchronisatie mislukt:",
+      error
+    );
+  }
+}
+
+
+/* =========================================================
+   COMPANY SELECTION
+   ========================================================= */
+
+async function isOffboardingList(t) {
+  const list = await t.list("id");
+  return list.id === OFFBOARDING_LIST_ID;
+}
+
+async function requestImmediateOffboarding(
+  t,
+  company
+) {
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "load-offboarding",
+          cardId:
+            card.id,
+          company:
+            company || null,
+        }),
+    });
+
+  let result = null;
+
+  for (
+    let attempt = 0;
+    attempt < 3;
+    attempt++
+  ) {
+    const response =
+      await fetch(
+        GUARD_OFFB_URL,
+        {
+          method:
+            "POST",
+
+          headers: {
+            Authorization:
+              "Bearer " +
+              jwt,
+          },
+
+          signal:
+            AbortSignal.timeout(
+              20000
+            ),
+        }
+      );
+
+    result =
+      await response.json();
+
+    if (
+      response.ok &&
+      result.status !==
+        "RETRY_PENDING"
+    ) {
+      return result;
+    }
+
+    if (
+      attempt < 2
+    ) {
+      await new Promise(
+        resolve =>
+          setTimeout(
+            resolve,
+            700
+          )
+      );
+    }
+  }
+
+  return (
+    result || {
+      status:
+        "RETRY_PENDING"
+    }
+  );
+}
+
+
+async function requestImmediateOnboarding(
+  t,
+  company
+) {
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "load-onboarding",
+          cardId:
+            card.id,
+          company:
+            company,
+        }),
+    });
+
+  const response =
+    await fetch(
+      GUARD_ONB_URL,
+      {
+        method:
+          "POST",
+
+        headers: {
+          Authorization:
+            "Bearer " +
+            jwt,
+        },
+
+        signal:
+          AbortSignal.timeout(
+            20000
+          ),
+      }
+    );
+
+  const result =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      result.error ||
+      "Onboarding laden mislukt"
+    );
+  }
+
+  return result;
+}
+
+
+async function requestOffboardingReason(
+  t,
+  reason
+) {
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "set-offb-reason",
+          cardId:
+            card.id,
+          reason:
+            reason,
+        }),
+    });
+
+  const response =
+    await fetch(
+      GUARD_REASON_URL,
+      {
+        method:
+          "POST",
+
+        headers: {
+          Authorization:
+            "Bearer " +
+            jwt,
+        },
+
+        signal:
+          AbortSignal.timeout(
+            20000
+          ),
+      }
+    );
+
+  const result =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      result.error ||
+      "Uitstroomreden opslaan mislukt"
+    );
+  }
+
+  await t.set(
+    "card",
+    "shared",
+    "offbReason",
+    reason
+  );
+
+  return result;
+}
+
+
+async function saveReasonChoice(
+  t,
+  reason
+) {
+  let finalReason =
+    reason;
+
+  if (reason === "Overig") {
+    return t.popup({
+      title:
+        "Overig",
+
+      url:
+        "./offb-reason-other.html",
+
+      height:
+        190
+    });
+  }
+
+  try {
+    await requestOffboardingReason(
+      t,
+      finalReason
+    );
+
+    await t.closePopup();
+
+    await t.alert({
+      message:
+        "Uitstroomreden opgeslagen"
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    await t.alert({
+      message:
+        error.message
+    });
+  }
+}
+
+
+async function getOffboardingReasonStatus(t) {
+
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "get-offb-reason-status",
+          cardId:
+            card.id,
+        }),
+    });
+
+  const response =
+    await fetch(
+      GUARD_REASON_STATUS_URL,
+      {
+        method: "POST",
+        headers: {
+          Authorization:
+            `Bearer ${jwt}`,
+        },
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      "Uitstroomredenstatus ophalen mislukt"
+    );
+  }
+
+  return response.json();
+}
+
+
+function openOffboardingReasonSelector(t) {
+
+  const reasons = [
+    "Ontslagname",
+    "Einde contract",
+    "Ontslag",
+    "Interne wijziging",
+    "Langdurige afwezigheid",
+    "Overig",
+  ];
+
+  return t.popup({
+    title:
+      "Uitstroomreden",
+
+    items:
+      reasons.map(
+        reason => ({
+          text:
+            reason,
+
+          callback:
+            function(t) {
+              return saveReasonChoice(
+                t,
+                reason
+              );
             }
-          )
-        );
+        })
+      )
+  });
+}
 
 
-      host.innerHTML =
-        rows.map(
-          function(row) {
+async function reloadOnboarding(t) {
 
-            return (
-              '<div class="reason-row">' +
+  try {
+    const company =
+      await t.get(
+        "card",
+        "shared",
+        "company",
+        null
+      );
 
-                '<div>' +
-                  escapeHtml(
-                    row.reason
-                  ) +
-                '</div>' +
-
-                '<div class="track">' +
-                  '<div class="fill" style="width:' +
-                    Math.round(
-                      (
-                        row.count /
-                        max
-                      ) *
-                      100
-                    ) +
-                    '%"></div>' +
-                '</div>' +
-
-                '<div>' +
-                  row.count +
-                '</div>' +
-
-              '</div>'
-            );
-          }
-        )
-          .join("");
+    if (!company) {
+      throw new Error(
+        "Stel eerst een bedrijf in"
+      );
     }
 
+    const result =
+      await requestImmediateOnboarding(
+        t,
+        company
+      );
 
-    function renderCompanies(
-      rows
+    if (
+      ![
+        "LOADED",
+        "ALREADY_LOADED",
+        "RETRY_PENDING"
+      ].includes(
+        result.status
+      )
     ) {
+      throw new Error(
+        "Onboarding kon niet worden geladen"
+      );
+    }
 
-      const body =
-        document.getElementById(
-          "companies"
-        );
+    await t.alert({
+      message:
+        result.status ===
+          "ALREADY_LOADED"
+          ? "Onboarding is al aanwezig"
+          : (
+              result.status ===
+                "RETRY_PENDING"
+                ? "Onboarding wordt opnieuw geprobeerd"
+                : "Ontbrekende onboarding is geladen"
+            )
+    });
 
+  } catch (error) {
+    console.error(error);
+
+    await t.alert({
+      message:
+        error.message
+    });
+  }
+}
+
+
+async function chooseCompany(t, company) {
+  try {
+    const existingCompany = await t.get("card", "shared", "company", null);
+    if (await isOffboardingList(t)) {
+      if (existingCompany && normalizeCompany(existingCompany) !== normalizeCompany(company)) {
+        throw new Error("Bedrijf is al ingesteld op " + existingCompany);
+      }
+      // Persist first. The Guard independently reads this value from Trello.
+      await t.set("card", "shared", "company", company);
+      let message = "Bedrijf opgeslagen. De uitstroomstappen worden automatisch opnieuw geprobeerd.";
+      try {
+        const result =
+          await requestImmediateOffboarding(
+            t,
+            company
+          );
+        if (["LOADED", "ALREADY_LOADED"].includes(result.status)) {
+          message = "Uitstroomstappen voor " + company + " zijn geladen.";
+        } else if (result.status === "NOT_APPLICABLE") {
+          message = "Bedrijf opgeslagen. De kaart staat niet meer in de uitstroomlijst.";
+        }
+      } catch (error) {
+        // Company stays saved; scheduled retries remain available.
+        console.warn("Direct uitstroom laden niet beschikbaar; geplande controle volgt.");
+      }
+      await t.closePopup();
+      await t.alert({ message });
+      return;
+    }
+    // Onboarding outside the offboarding list is now
+    // loaded centrally by the Guard.
+    if (existingCompany) {
+      throw new Error(
+        "Bedrijf is al ingesteld op " +
+        existingCompany
+      );
+    }
+
+    /*
+     * Persist the company first.
+     * The Guard request may succeed in copying checklists and then hit
+     * a secondary warning-label/API issue. The company must never be
+     * lost just because a later backend step failed.
+     */
+    await t.set(
+      "card",
+      "shared",
+      "company",
+      company
+    );
+
+    const result =
+      await requestImmediateOnboarding(
+        t,
+        company
+      );
+
+    if (
+      result.status !== "LOADED" &&
+      result.status !== "ALREADY_LOADED" &&
+      result.status !== "RETRY_PENDING"
+    ) {
+      throw new Error(
+        "Bedrijf opgeslagen, maar onboarding kon niet volledig worden geladen"
+      );
+    }
+
+    await t.closePopup();
+
+    await t.alert({
+      message:
+        result.status ===
+          "ALREADY_LOADED"
+          ? "Onboarding is al aanwezig. Bedrijf ingesteld op " +
+            company
+          : (
+              result.status ===
+                "RETRY_PENDING"
+                ? "Bedrijf is opgeslagen. Onboarding wordt opnieuw geprobeerd."
+                : "Onboarding voor " +
+                  company +
+                  " is geladen"
+            )
+    });
+  } catch (error) {
+    console.error(error);
+    await t.alert({ message: error.message });
+  }
+}
+
+
+/* =========================================================
+   DYNAMIC COMPANY MENU
+   ========================================================= */
+
+async function openCompanySelector(t) {
+
+  const sourceCards =
+    await getSourceCards(t);
+
+
+  const activeSourceCards =
+    sourceCards.filter(
+      function(source) {
+
+        return !source.inactive;
+      }
+    );
+
+
+  if (
+    activeSourceCards.length === 0
+  ) {
+
+    return t.alert({
+
+      message:
+        "Geen actieve onboardingssjablonen gevonden"
+    });
+  }
+
+
+  const uniqueCompanies =
+    new Map();
+
+
+  activeSourceCards.forEach(
+    function(source) {
 
       if (
-        !rows.length
+        !uniqueCompanies.has(
+          source.companyKey
+        )
       ) {
 
-        body.innerHTML =
-          '<tr><td colspan="7" class="empty">Nog geen medewerkergegevens beschikbaar.</td></tr>';
-
-        return;
-      }
-
-
-      body.innerHTML =
-        rows.map(
-          function(row) {
-
-            return (
-              '<tr>' +
-
-                '<td>' +
-                  escapeHtml(
-                    row.company
-                  ) +
-                '</td>' +
-
-                '<td>' +
-                  (row.onboarding || 0) +
-                '</td>' +
-
-                '<td>' +
-                  (row.onboarded || 0) +
-                '</td>' +
-
-                '<td>' +
-                  (row.operational || 0) +
-                '</td>' +
-
-                '<td>' +
-                  (row.offboarding || 0) +
-                '</td>' +
-
-                '<td>' +
-                  (row.offboarded || 0) +
-                '</td>' +
-
-                '<td>' +
-                  (row.afwijkend || 0) +
-                '</td>' +
-
-              '</tr>'
-            );
-          }
-        )
-          .join("");
-    }
-
-
-    function escapeHtml(
-      value
-    ) {
-
-      return String(
-        value ?? ""
-      )
-        .replaceAll(
-          "&",
-          "&amp;"
-        )
-        .replaceAll(
-          "<",
-          "&lt;"
-        )
-        .replaceAll(
-          ">",
-          "&gt;"
-        )
-        .replaceAll(
-          '"',
-          "&quot;"
-        )
-        .replaceAll(
-          "'",
-          "&#039;"
+        uniqueCompanies.set(
+          source.companyKey,
+          source.company
         );
+      }
     }
+  );
 
 
-    document
-      .getElementById(
-        "filters"
+  const items =
+    Array
+      .from(
+        uniqueCompanies.values()
       )
-      .addEventListener(
-        "click",
-        function(event) {
 
-          const button =
-            event.target.closest(
-              "button[data-period]"
-            );
+      .sort(function(a, b) {
 
-          if (!button) {
-            return;
-          }
+        return a.localeCompare(b);
+      })
 
+      .map(
+        function(company) {
 
-          loadDashboard(
-            button.dataset.period
-          )
-            .catch(
-              showError
-            );
+          return {
+
+            text:
+              company,
+
+            callback:
+              function(t) {
+
+                return chooseCompany(
+                  t,
+                  company
+                );
+              }
+          };
         }
       );
 
 
-    function showError(
-      error
-    ) {
+  return t.popup({
 
-      document
-        .getElementById(
-          "movement"
-        )
-        .innerHTML =
-          '<div class="empty">' +
-          escapeHtml(
-            error.message ||
+    title:
+      "Selecteer bedrijf",
+
+    items:
+      items
+  });
+}
+
+
+/* =========================================================
+   DASHBOARD
+   ========================================================= */
+
+function openNktrDashboard(
+  t
+) {
+  return t.modal({
+    url:
+      DASHBOARD_URL,
+
+    title:
+      "NKTR Dashboard",
+
+    fullscreen:
+      true
+  });
+}
+
+
+/* =========================================================
+   POWER-UP
+   ========================================================= */
+
+window.TrelloPowerUp.initialize({
+
+
+  /* -------------------------------------------------------
+     BOARD DASHBOARD
+     ------------------------------------------------------- */
+
+  "board-buttons":
+    function(t) {
+
+      return [{
+
+        text:
+          "NKTR Dashboard",
+
+        condition:
+          "admin",
+
+        callback:
+          function(t) {
+
+            return openNktrDashboard(
+              t
+            );
+          }
+      }];
+    },
+
+
+  /* -------------------------------------------------------
+     OPEN CARD
+     ------------------------------------------------------- */
+
+  "card-detail-badges":
+    async function(t) {
+
+
+      const card =
+        await t.card(
+          "name"
+        );
+
+
+      if (isSeparatorCard(card)) {
+        return [];
+      }
+
+
+      if (isSourceCard(card)) {
+
+        const badges = [];
+
+
+        try {
+          const sourceWarning =
+            await getSourcePermissionWarning(
+              t
+            );
+
+          if (sourceWarning.active) {
+            badges.push({
+              title:
+                "Beveiligde bronkaart",
+              text:
+                "🔒 Alleen beheerders",
+              color:
+                "purple"
+            });
+          }
+        } catch (error) {
+          console.error(
+            "Bronkaart-waarschuwing mislukt:",
             error
-          ) +
-          '</div>';
+          );
+        }
+
+
+        const duplicateCompany =
+          await isDuplicateCompanyTemplate(
+            t
+          );
+
+
+        if (duplicateCompany) {
+
+          badges.push({
+
+            title:
+              "Waarschuwing",
+
+            text:
+              "Dubbel bedrijf",
+
+            color:
+              "red"
+          });
+        }
+
+
+        const empty =
+          await isTemplateEmpty(t);
+
+
+        if (empty) {
+
+          badges.push({
+
+            title:
+              "Waarschuwing",
+
+            text:
+              "Sjabloon leeg",
+
+            color:
+              "red"
+          });
+        }
+
+
+        return badges;
+      }
+
+
+      const badges = [];
+
+
+      try {
+
+        const duplicateStatus =
+          await getDuplicateStatus(
+            t
+          );
+
+        if (
+          duplicateStatus.duplicate
+        ) {
+
+          badges.push({
+
+            title:
+              "Waarschuwing",
+
+            text:
+              "⚠ MOGELIJK DUBBEL",
+
+            color:
+              "yellow",
+
+            callback:
+              function(t) {
+
+                return openDuplicatePopup(
+                  t,
+                  duplicateStatus
+                );
+              }
+          });
+        }
+
+      } catch (error) {
+
+        console.error(
+          "Dubbelcontrole mislukt:",
+          error
+        );
+      }
+
+
+      const company =
+        await t.get(
+          "card",
+          "shared",
+          "company",
+          null
+        );
+
+
+      if (company) {
+
+        badges.push({
+
+          title: "Bedrijf",
+          text: company,
+          callback: await isOffboardingList(t)
+            ? function(t) { return chooseCompany(t, company); }
+            : undefined
+        });
+
+      } else {
+
+        badges.push({
+
+          title:
+            "Bedrijf",
+
+          text:
+            "Bedrijf instellen",
+
+          callback:
+            function(t) {
+
+              return openCompanySelector(
+                t
+              );
+            }
+        });
+      }
+
+
+      const inOffboarding =
+        await isOffboardingList(t);
+
+      if (inOffboarding) {
+
+        let reasonState = null;
+
+        try {
+          reasonState =
+            await getOffboardingReasonStatus(
+              t
+            );
+        } catch (error) {
+          console.error(
+            "Reason status lookup failed",
+            error
+          );
+        }
+
+        const fallbackReason =
+          await t.get(
+            "card",
+            "shared",
+            "offbReason",
+            null
+          );
+
+        const offbReason =
+          reasonState
+            ? reasonState.reason
+            : fallbackReason;
+
+        const reasonMissing =
+          reasonState
+            ? Boolean(
+                reasonState.missing
+              )
+            : !offbReason;
+
+        badges.push({
+
+          title:
+            "Uitstroomreden",
+
+          text:
+            offbReason ||
+            "Reden toevoegen",
+
+          color:
+            reasonMissing
+              ? "yellow"
+              : null,
+
+          callback:
+            function(t) {
+
+              return openOffboardingReasonSelector(
+                t
+              );
+            }
+        });
+
+      } else if (company) {
+
+        const hasOnboarding =
+          await hasOnboardingChecklist(
+            t
+          );
+
+        if (!hasOnboarding) {
+
+          badges.push({
+
+            title:
+              "Onboarding",
+
+            text:
+              "Onboarding laden",
+
+            callback:
+              function(t) {
+
+                return reloadOnboarding(
+                  t
+                );
+              }
+          });
+        }
+      }
+
+
+      return badges;
+    },
+
+
+  /* -------------------------------------------------------
+     CLOSED CARD
+     ------------------------------------------------------- */
+
+  "card-badges":
+    async function(t) {
+
+
+      const card =
+        await t.card(
+          "name"
+        );
+
+
+      if (isSeparatorCard(card)) {
+        return [];
+      }
+
+
+      if (isSourceCard(card)) {
+
+        return [{
+
+          dynamic:
+            async function() {
+
+
+              try {
+                const sourceWarning =
+                  await getSourcePermissionWarning(
+                    t
+                  );
+
+                if (sourceWarning.active) {
+                  return {
+                    text:
+                      "🔒 Alleen beheerders",
+                    color:
+                      "purple",
+                    refresh:
+                      10
+                  };
+                }
+              } catch (error) {
+                console.error(
+                  "Bronkaart-waarschuwing mislukt:",
+                  error
+                );
+              }
+
+
+              const duplicateCompany =
+                await isDuplicateCompanyTemplate(
+                  t
+                );
+
+
+              if (duplicateCompany) {
+
+                return {
+
+                  text:
+                    "⚠ DUBBEL BEDRIJF",
+
+                  color:
+                    "red",
+
+                  refresh:
+                    10
+                };
+              }
+
+
+              const empty =
+                await isTemplateEmpty(
+                  t
+                );
+
+
+              return {
+
+                text:
+                  empty
+                    ? "⚠ SJABLOON LEEG"
+                    : "",
+
+                color:
+                  empty
+                    ? "red"
+                    : null,
+
+                refresh:
+                  10
+              };
+            }
+        }];
+      }
+
+
+      const list =
+        await t.list(
+          "name"
+        );
+
+
+      if (
+        list.name ===
+        FULLY_OPERATIONAL_LIST
+      ) {
+
+        return [{
+
+          dynamic:
+            async function() {
+
+
+              await syncOperationalCover(
+                t
+              );
+
+
+              const noChecklist =
+                await hasNoChecklistItems(
+                  t
+                );
+
+              const incomplete =
+                noChecklist
+                  ? false
+                  : await hasIncompleteSteps(
+                      t
+                    );
+
+
+              return {
+
+                text:
+                  noChecklist
+                    ? "⚠ GEEN ONBOARDING"
+                    : (
+                        incomplete
+                          ? "⚠ ONVOLLEDIG"
+                          : ""
+                      ),
+
+                color:
+                  (noChecklist || incomplete)
+                    ? "red"
+                    : null,
+
+                refresh:
+                  10
+              };
+            }
+        }];
+      }
+
+
+      const badges = [];
+
+
+      badges.push({
+
+        dynamic:
+          async function() {
+
+
+            await syncOperationalCover(
+              t
+            );
+
+
+            try {
+
+              const duplicateStatus =
+                await getDuplicateStatus(
+                  t
+                );
+
+              return {
+
+                text:
+                  duplicateStatus.duplicate
+                    ? "⚠ MOGELIJK DUBBEL"
+                    : "",
+
+                color:
+                  duplicateStatus.duplicate
+                    ? "yellow"
+                    : null,
+
+                refresh:
+                  30
+              };
+
+            } catch (error) {
+
+              console.error(
+                "Dubbelcontrole mislukt:",
+                error
+              );
+
+              return {
+
+                text:
+                  "",
+
+                refresh:
+                  30
+              };
+            }
+          }
+      });
+
+
+      badges.push({
+
+        dynamic:
+          async function() {
+
+
+            const progress =
+              await getProgressBar(
+                t
+              );
+
+
+            return {
+
+              text:
+                progress,
+
+              refresh:
+                10
+            };
+          }
+      });
+
+
+      const company =
+        await t.get(
+          "card",
+          "shared",
+          "company",
+          null
+        );
+
+
+      if (company) {
+
+        badges.push({
+
+          text:
+            company
+        });
+      }
+
+
+      return badges;
     }
 
 
-    document
-      .getElementById(
-        "generated"
-      )
-      .textContent =
-        "Dashboard laden…";
+}, {
 
-    loadDashboard(
-      "year"
-    )
-      .catch(
-        showError
-      );
+  clientId:
+    CLIENT_ID,
 
-  </script>
+  redirectUri:
+    REDIRECT_URI
+
+});
+
+</script>
 
 </body>
 </html>
