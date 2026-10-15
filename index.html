@@ -715,16 +715,17 @@ async function hasNoChecklistItems(t) {
 }
 
 
-async function hasOnboardingChecklist(t) {
+async function getOnboardingRecoveryState(t) {
 
   const card =
     await t.card(
       "checklists"
     );
 
-  return (
-    card.checklists || []
-  ).some(
+  let hasOnboarding = false;
+  let hasHistoricalOffboarding = false;
+
+  (card.checklists || []).forEach(
     checklist => {
 
       const name =
@@ -732,21 +733,27 @@ async function hasOnboardingChecklist(t) {
           checklist.name || ""
         ).trim();
 
-      /*
-       * Current OFFB checklists and archived OFFB history are not
-       * onboarding. A reactivated employee with only OFFB history
-       * must still get the "Onboarding laden" action.
-       */
       if (
-        /^OFFB\s*\|/i.test(name) ||
         /^HISTORIE\s*\|\s*OFFB\s*\|/i.test(name)
       ) {
-        return false;
+        hasHistoricalOffboarding = true;
+        return;
       }
 
-      return true;
+      if (
+        /^OFFB\s*\|/i.test(name)
+      ) {
+        return;
+      }
+
+      hasOnboarding = true;
     }
   );
+
+  return {
+    hasOnboarding,
+    hasHistoricalOffboarding,
+  };
 }
 
 
@@ -1702,12 +1709,22 @@ window.TrelloPowerUp.initialize({
         });
 
       } else if (company) {
-        const hasOnboarding =
-          await hasOnboardingChecklist(
+        const recoveryState =
+          await getOnboardingRecoveryState(
             t
           );
 
-        if (!hasOnboarding) {
+        /*
+         * Do not show a transient "Onboarding laden" button while
+         * onboarding is still being copied after a fresh company choice.
+         * The recovery action is only relevant after a completed
+         * offboarding cycle has been preserved as HISTORIE | OFFB | ...
+         * and the employee currently has no onboarding checklist.
+         */
+        if (
+          !recoveryState.hasOnboarding &&
+          recoveryState.hasHistoricalOffboarding
+        ) {
           badges.push({
             title: "Onboarding",
             text: "Onboarding laden",
