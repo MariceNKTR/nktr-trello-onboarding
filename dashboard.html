@@ -627,6 +627,41 @@
     }
 
 
+    const DASHBOARD_CACHE_PREFIX =
+      "nktr-dashboard-cache:";
+
+    function readDashboardCache(period) {
+      try {
+        const raw =
+          sessionStorage.getItem(
+            DASHBOARD_CACHE_PREFIX +
+            period
+          );
+
+        return raw
+          ? JSON.parse(raw)
+          : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function writeDashboardCache(
+      period,
+      data
+    ) {
+      try {
+        sessionStorage.setItem(
+          DASHBOARD_CACHE_PREFIX +
+          period,
+          JSON.stringify(data)
+        );
+      } catch {
+        // Cache is optional. The live dashboard still works without it.
+      }
+    }
+
+
     async function loadDashboard(
       period
     ) {
@@ -651,6 +686,25 @@
             );
           }
         );
+
+
+      const cached =
+        readDashboardCache(
+          period
+        );
+
+      if (cached) {
+        render(
+          cached
+        );
+
+        document
+          .getElementById(
+            "generated"
+          )
+          .textContent =
+            "Bijwerken…";
+      }
 
 
       const jwt =
@@ -705,6 +759,11 @@
         );
       }
 
+
+      writeDashboardCache(
+        period,
+        data
+      );
 
       render(
         data
@@ -1146,7 +1205,7 @@
         "Dashboard laden…";
 
     loadDashboard(
-      "year"
+      "month"
     )
       .catch(
         showError
