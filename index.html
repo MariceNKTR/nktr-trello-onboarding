@@ -31,6 +31,17 @@ const GUARD_REASON_STATUS_URL = "https://nktr-trello-guard.marice-angulo.workers
 
 const TOTAL_PROGRESS_BLOCKS = 10;
 
+/* Lightweight client-side cache for source-card metadata.
+ * This avoids asking Trello for the same board-card list once per
+ * visible source card while still forcing a fresh read when the
+ * company selector is opened.
+ */
+const SOURCE_CARDS_CACHE_MS = 15000;
+let sourceCardsCache = {
+  expiresAt: 0,
+  cards: null
+};
+
 const FULLY_OPERATIONAL_LIST =
   "Fully Operational";
 
@@ -125,17 +136,30 @@ function isSeparatorCard(card) {
 }
 
 
-async function getSourceCards(t) {
+async function getSourceCards(t, force = false) {
 
+  const now = Date.now();
+
+  if (
+    !force &&
+    sourceCardsCache.cards &&
+    now < sourceCardsCache.expiresAt
+  ) {
+    return sourceCardsCache.cards;
+  }
+
+  /*
+   * Company selection only needs card names and labels.
+   * Pulling every checklist from every board card made this menu
+   * unnecessarily expensive on larger boards.
+   */
   const cards = await t.cards(
     "id",
     "name",
-    "checklists",
     "labels"
   );
 
-  return cards
-
+  const sources = cards
     .map(function(card) {
 
       const company =
@@ -148,42 +172,34 @@ async function getSourceCards(t) {
       }
 
       return {
-
-        id:
-          card.id,
-
-        name:
-          card.name,
-
-        company:
-          company,
-
+        id: card.id,
+        name: card.name,
+        company: company,
         companyKey:
           normalizeCompany(company),
-
-        checklists:
-          card.checklists || [],
-
         labels:
           card.labels || [],
-
         inactive:
           hasInactiveLabel(
             card.labels || []
           )
       };
     })
-
     .filter(Boolean)
-
     .sort(function(a, b) {
-
       return a.company.localeCompare(
         b.company
       );
     });
-}
 
+  sourceCardsCache = {
+    cards: sources,
+    expiresAt:
+      now + SOURCE_CARDS_CACHE_MS
+  };
+
+  return sources;
+}
 
 /* =========================================================
    TEMPLATE HEALTH
@@ -1542,95 +1558,98 @@ window.TrelloPowerUp.initialize({
 
       const badges = [];
 
-
-      try {
-
-        const duplicateStatus =
-          await getDuplicateStatus(
-            t
-          );
-
-        if (
-          duplicateStatus.duplicate
-        ) {
-
-          badges.push({
-
-            title:
-              "Waarschuwing",
-
-            text:
-              "⚠ MOGELIJK DUBBEL",
-
-            color:
-              "yellow",
-
-            callback:
-              function(t) {
-
-                return openDuplicatePopup(
-                  t,
-                  duplicateStatus
-                );
-              }
-          });
-        }
-
-      } catch (error) {
-
-        console.error(
-          "Dubbelcontrole mislukt:",
-          error
-        );
-      }
-
-
-      const company =
-        await t.get(
+      /*
+       * These three reads do not depend on each other. Running them in
+       * parallel prevents the duplicate check from serially delaying the
+       * company and list state.
+       */
+      const [
+        duplicateResult,
+        companyResult,
+        listResult
+      ] = await Promise.allSettled([
+        getDuplicateStatus(t),
+        t.get(
           "card",
           "shared",
           "company",
           null
+        ),
+        t.list("id")
+      ]);
+
+      const duplicateStatus =
+        duplicateResult.status ===
+          "fulfilled"
+          ? duplicateResult.value
+          : {
+              duplicate: false,
+              matches: []
+            };
+
+      if (
+        duplicateResult.status ===
+        "rejected"
+      ) {
+        console.error(
+          "Dubbelcontrole mislukt:",
+          duplicateResult.reason
         );
+      }
 
-
-      if (company) {
-
+      if (duplicateStatus.duplicate) {
         badges.push({
-
-          title: "Bedrijf",
-          text: company,
-          callback: await isOffboardingList(t)
-            ? function(t) { return chooseCompany(t, company); }
-            : undefined
-        });
-
-      } else {
-
-        badges.push({
-
-          title:
-            "Bedrijf",
-
-          text:
-            "Bedrijf instellen",
-
+          title: "Waarschuwing",
+          text: "⚠ MOGELIJK DUBBEL",
+          color: "yellow",
           callback:
             function(t) {
-
-              return openCompanySelector(
-                t
+              return openDuplicatePopup(
+                t,
+                duplicateStatus
               );
             }
         });
       }
 
+      const company =
+        companyResult.status ===
+          "fulfilled"
+          ? companyResult.value
+          : null;
 
       const inOffboarding =
-        await isOffboardingList(t);
+        listResult.status ===
+          "fulfilled" &&
+        listResult.value.id ===
+          OFFBOARDING_LIST_ID;
+
+      if (company) {
+        badges.push({
+          title: "Bedrijf",
+          text: company,
+          callback:
+            inOffboarding
+              ? function(t) {
+                  return chooseCompany(
+                    t,
+                    company
+                  );
+                }
+              : undefined
+        });
+      } else {
+        badges.push({
+          title: "Bedrijf",
+          text: "Bedrijf instellen",
+          callback:
+            function(t) {
+              return openCompanySelector(t);
+            }
+        });
+      }
 
       if (inOffboarding) {
-
         let reasonState = null;
 
         try {
@@ -1666,22 +1685,16 @@ window.TrelloPowerUp.initialize({
             : !offbReason;
 
         badges.push({
-
-          title:
-            "Uitstroomreden",
-
+          title: "Uitstroomreden",
           text:
             offbReason ||
             "Reden toevoegen",
-
           color:
             reasonMissing
               ? "yellow"
               : null,
-
           callback:
             function(t) {
-
               return openOffboardingReasonSelector(
                 t
               );
@@ -1689,33 +1702,22 @@ window.TrelloPowerUp.initialize({
         });
 
       } else if (company) {
-
         const hasOnboarding =
           await hasOnboardingChecklist(
             t
           );
 
         if (!hasOnboarding) {
-
           badges.push({
-
-            title:
-              "Onboarding",
-
-            text:
-              "Onboarding laden",
-
+            title: "Onboarding",
+            text: "Onboarding laden",
             callback:
               function(t) {
-
-                return reloadOnboarding(
-                  t
-                );
+                return reloadOnboarding(t);
               }
           });
         }
       }
-
 
       return badges;
     },
@@ -1761,7 +1763,7 @@ window.TrelloPowerUp.initialize({
                     color:
                       "purple",
                     refresh:
-                      10
+                      60
                   };
                 }
               } catch (error) {
@@ -1789,7 +1791,7 @@ window.TrelloPowerUp.initialize({
                     "red",
 
                   refresh:
-                    10
+                    60
                 };
               }
 
@@ -1813,7 +1815,7 @@ window.TrelloPowerUp.initialize({
                     : null,
 
                 refresh:
-                  10
+                  60
               };
             }
         }];
@@ -1837,22 +1839,18 @@ window.TrelloPowerUp.initialize({
             async function() {
 
 
-              await syncOperationalCover(
-                t
-              );
-
-
-              const noChecklist =
-                await hasNoChecklistItems(
+              const progress =
+                await getChecklistProgress(
                   t
                 );
 
+              const noChecklist =
+                progress.total === 0;
+
               const incomplete =
-                noChecklist
-                  ? false
-                  : await hasIncompleteSteps(
-                      t
-                    );
+                !noChecklist &&
+                progress.completed <
+                  progress.total;
 
 
               return {
@@ -1872,7 +1870,7 @@ window.TrelloPowerUp.initialize({
                     : null,
 
                 refresh:
-                  10
+                  30
               };
             }
         }];
@@ -1880,60 +1878,6 @@ window.TrelloPowerUp.initialize({
 
 
       const badges = [];
-
-
-      badges.push({
-
-        dynamic:
-          async function() {
-
-
-            await syncOperationalCover(
-              t
-            );
-
-
-            try {
-
-              const duplicateStatus =
-                await getDuplicateStatus(
-                  t
-                );
-
-              return {
-
-                text:
-                  duplicateStatus.duplicate
-                    ? "⚠ MOGELIJK DUBBEL"
-                    : "",
-
-                color:
-                  duplicateStatus.duplicate
-                    ? "yellow"
-                    : null,
-
-                refresh:
-                  30
-              };
-
-            } catch (error) {
-
-              console.error(
-                "Dubbelcontrole mislukt:",
-                error
-              );
-
-              return {
-
-                text:
-                  "",
-
-                refresh:
-                  30
-              };
-            }
-          }
-      });
 
 
       badges.push({
@@ -1954,7 +1898,7 @@ window.TrelloPowerUp.initialize({
                 progress,
 
               refresh:
-                10
+                30
             };
           }
       });
