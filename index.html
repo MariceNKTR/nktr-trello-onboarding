@@ -1,34 +1,1960 @@
 <!doctype html>
-<html lang="nl">
+<html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>NKTR PICKET</title>
+  <title>NKTR Onboarding</title>
 </head>
+
 <body>
+
 <script src="https://p.trellocdn.com/power-up.min.js"></script>
+
 <script>
-  // PICKET v1.2: desktop form entry point. No credential or incident data is stored here.
-  window.TrelloPowerUp.initialize({
-    'board-buttons': function(t) {
-      return [{
-        icon: {
-          dark: 'https://maricenktr.github.io/nktr-trello-picket/icon-white.svg',
-          light: 'https://maricenktr.github.io/nktr-trello-picket/icon-dark.svg'
+
+const CLIENT_ID =
+  "VGpJ9UId4pH0TheoJUoTuVczLidyM3IQ";
+
+const REDIRECT_URI =
+  "https://maricenktr.github.io/nktr-trello-onboarding/oauth-callback.html";
+
+const OFFBOARDING_LIST_ID = "6abfc9b4d6a0cebc239f819e";
+const GUARD_OFFB_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/request";
+const GUARD_DUPLICATE_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/employee/duplicates";
+const GUARD_DUPLICATE_IGNORE_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/employee/duplicates/ignore";
+const GUARD_RESTORE_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/employee/restore";
+const GUARD_SOURCE_WARNING_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/source/warning/status";
+const DASHBOARD_URL = "./dashboard.html";
+const GUARD_ONB_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/onb/request";
+const GUARD_COVER_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/cover/sync";
+const GUARD_REASON_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/reason";
+const GUARD_REASON_STATUS_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/reason/status";
+
+const TOTAL_PROGRESS_BLOCKS = 10;
+
+/* Lightweight client-side cache for source-card metadata.
+ * This avoids asking Trello for the same board-card list once per
+ * visible source card while still forcing a fresh read when the
+ * company selector is opened.
+ */
+const SOURCE_CARDS_CACHE_MS = 15000;
+let sourceCardsCache = {
+  expiresAt: 0,
+  cards: null
+};
+
+const FULLY_OPERATIONAL_LIST =
+  "Fully Operational";
+
+const INACTIVE_LABEL =
+  "inactief";
+
+
+/* =========================================================
+   TEMPLATE DETECTION
+   ========================================================= */
+
+function getCompanyFromSourceCardName(name) {
+
+  const match = (name || "").match(
+    /^🔒︎\s*ONB\s*\|\s*(.+?)\s*\|\s*Stappenbron$/i
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  return match[1].trim();
+}
+
+
+function normalizeCompany(company) {
+
+  return (company || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+
+function normalizeLabel(labelName) {
+
+  return (labelName || "")
+    .trim()
+    .toLowerCase();
+}
+
+
+function hasInactiveLabel(labels) {
+
+  return (labels || []).some(
+    function(label) {
+
+      return (
+        normalizeLabel(label.name) ===
+        INACTIVE_LABEL
+      );
+    }
+  );
+}
+
+
+function isOffboardingSourceCardName(name) {
+  return /^🔒︎\s*OFFB\s*\|\s*Stappenbron$/i.test(
+    String(name || "").trim()
+  );
+}
+
+
+function isSourceCard(card) {
+
+  return (
+    !!getCompanyFromSourceCardName(
+      card.name
+    ) ||
+    isOffboardingSourceCardName(
+      card.name
+    )
+  );
+}
+
+
+/* =========================================================
+   SEPARATOR CARDS
+   ========================================================= */
+
+function isSeparatorCard(card) {
+
+  const name =
+    (card && card.name)
+      ? card.name.trim()
+      : "";
+
+  return (
+    name.startsWith("──") ||
+    /^↓{2,}/.test(name)
+  );
+}
+
+
+async function getSourceCards(t, force = false) {
+
+  const now = Date.now();
+
+  if (
+    !force &&
+    sourceCardsCache.cards &&
+    now < sourceCardsCache.expiresAt
+  ) {
+    return sourceCardsCache.cards;
+  }
+
+  /*
+   * Company selection only needs card names and labels.
+   * Pulling every checklist from every board card made this menu
+   * unnecessarily expensive on larger boards.
+   */
+  const cards = await t.cards(
+    "id",
+    "name",
+    "labels"
+  );
+
+  const sources = cards
+    .map(function(card) {
+
+      const company =
+        getCompanyFromSourceCardName(
+          card.name
+        );
+
+      if (!company) {
+        return null;
+      }
+
+      return {
+        id: card.id,
+        name: card.name,
+        company: company,
+        companyKey:
+          normalizeCompany(company),
+        labels:
+          card.labels || [],
+        inactive:
+          hasInactiveLabel(
+            card.labels || []
+          )
+      };
+    })
+    .filter(Boolean)
+    .sort(function(a, b) {
+      return a.company.localeCompare(
+        b.company
+      );
+    });
+
+  sourceCardsCache = {
+    cards: sources,
+    expiresAt:
+      now + SOURCE_CARDS_CACHE_MS
+  };
+
+  return sources;
+}
+
+/* =========================================================
+   TEMPLATE HEALTH
+   ========================================================= */
+
+async function isTemplateEmpty(t) {
+
+  const result =
+    await t.card(
+      "checklists"
+    );
+
+  const checklists =
+    result.checklists || [];
+
+  return checklists.length === 0;
+}
+
+
+/* =========================================================
+   DUPLICATE COMPANY / TEMPLATE DETECTION
+   ========================================================= */
+
+async function isDuplicateCompanyTemplate(t) {
+
+  const currentCard =
+    await t.card(
+      "name"
+    );
+
+  const company =
+    getCompanyFromSourceCardName(
+      currentCard.name
+    );
+
+  if (!company) {
+    return false;
+  }
+
+  const companyKey =
+    normalizeCompany(company);
+
+  const sourceCards =
+    await getSourceCards(t);
+
+  const matches =
+    sourceCards.filter(
+      function(source) {
+
+        return (
+          source.companyKey ===
+          companyKey
+        );
+      }
+    );
+
+  return matches.length > 1;
+}
+
+
+/* =========================================================
+   EMPLOYEE NAME NORMALIZATION
+   ========================================================= */
+
+function normalizeName(name) {
+
+  return (name || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+
+function getNameParts(name) {
+
+  const normalized =
+    normalizeName(name);
+
+  if (!normalized) {
+    return [];
+  }
+
+  return normalized.split(" ");
+}
+
+
+/* =========================================================
+   EMPLOYEE DUPLICATE CHECK
+   Guard checks open + archived employee cards.
+   ========================================================= */
+
+async function getDuplicateStatus(
+  t
+) {
+  const card =
+    await t.card(
+      "id",
+      "name"
+    );
+
+  if (
+    isSourceCard(
+      card
+    ) ||
+    isSeparatorCard(
+      card
+    )
+  ) {
+    return {
+      duplicate:
+        false,
+      matches:
+        []
+    };
+  }
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "duplicate-check",
+          cardId:
+            card.id
+        })
+    });
+
+  const response =
+    await fetch(
+      GUARD_DUPLICATE_URL,
+      {
+        method:
+          "POST",
+        headers: {
+          "Authorization":
+            "Bearer " +
+            jwt
         },
-        text: '+ MELDING',
-        condition: 'edit',
-        callback: function(t) {
-          return t.modal({
-            url: './melding.html',
-            title: 'Nieuwe melding',
-            height: 760,
-            fullscreen: false
+        signal:
+          AbortSignal.timeout(
+            20000
+          )
+      }
+    );
+
+  if (
+    !response.ok
+  ) {
+    throw new Error(
+      "Dubbelcontrole mislukt"
+    );
+  }
+
+  return response.json();
+}
+
+
+async function restoreArchivedDuplicate(
+  t,
+  restoreCardId
+) {
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "restore-archived",
+          cardId:
+            card.id,
+          restoreCardId:
+            restoreCardId
+        })
+    });
+
+  const response =
+    await fetch(
+      GUARD_RESTORE_URL,
+      {
+        method:
+          "POST",
+        headers: {
+          "Authorization":
+            "Bearer " +
+            jwt
+        },
+        signal:
+          AbortSignal.timeout(
+            20000
+          )
+      }
+    );
+
+  const body =
+    await response.json()
+      .catch(
+        function() {
+          return {};
+        }
+      );
+
+  if (
+    !response.ok
+  ) {
+    throw new Error(
+      body.error ||
+      "Herstellen uit archief mislukt"
+    );
+  }
+
+  await t.alert({
+    message:
+      "Oude medewerkerkaart hersteld; nieuwe dubbele kaart gearchiveerd."
+  });
+
+  return t.closePopup();
+}
+
+
+async function ignoreDuplicatePair(
+  t,
+  matchCardId
+) {
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "ignore-duplicate",
+          cardId:
+            card.id,
+          matchCardId:
+            matchCardId
+        })
+    });
+
+  const response =
+    await fetch(
+      GUARD_DUPLICATE_IGNORE_URL,
+      {
+        method:
+          "POST",
+        headers: {
+          "Authorization":
+            "Bearer " +
+            jwt
+        },
+        signal:
+          AbortSignal.timeout(
+            20000
+          )
+      }
+    );
+
+  const body =
+    await response.json()
+      .catch(
+        function() {
+          return {};
+        }
+      );
+
+  if (!response.ok) {
+    throw new Error(
+      body.error ||
+      "Geen dubbel opslaan mislukt"
+    );
+  }
+
+  await t.alert({
+    message:
+      "Gemarkeerd als geen dubbel."
+  });
+
+  return t.closePopup();
+}
+
+async function getSourcePermissionWarning(
+  t
+) {
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "source-warning-status",
+          cardId:
+            card.id
+        })
+    });
+
+  const response =
+    await fetch(
+      GUARD_SOURCE_WARNING_URL,
+      {
+        method:
+          "POST",
+        headers: {
+          "Authorization":
+            "Bearer " +
+            jwt
+        },
+        signal:
+          AbortSignal.timeout(
+            10000
+          )
+      }
+    );
+
+  if (!response.ok) {
+    return {
+      active:
+        false
+    };
+  }
+
+  return response.json();
+}
+
+async function openDuplicatePopup(
+  t,
+  status
+) {
+  const result =
+    status ||
+    await getDuplicateStatus(
+      t
+    );
+
+  const matches =
+    result.matches ||
+    [];
+
+  if (
+    !matches.length
+  ) {
+    return t.alert({
+      message:
+        "Geen mogelijke dubbele medewerker gevonden."
+    });
+  }
+
+  const items =
+    matches.flatMap(
+      function(match) {
+
+        const actions = [];
+
+        if (
+          match.archived
+        ) {
+          actions.push({
+            text:
+              "Herstellen uit archief · " +
+              match.name,
+
+            callback:
+              function(t) {
+
+                return restoreArchivedDuplicate(
+                  t,
+                  match.id
+                );
+              }
+          });
+        } else {
+          actions.push({
+            text:
+              "Actieve kaart · " +
+              match.name,
+
+            callback:
+              function(t) {
+
+                if (
+                  match.url
+                ) {
+                  return t.navigate({
+                    url:
+                      match.url
+                  });
+                }
+
+                return t.alert({
+                  message:
+                    match.name
+                });
+              }
           });
         }
-      }];
-    }
+
+        actions.push({
+          text:
+            "Geen dubbel · " +
+            match.name,
+
+          callback:
+            function(t) {
+
+              return ignoreDuplicatePair(
+                t,
+                match.id
+              );
+            }
+        });
+
+        return actions;
+      }
+    );
+
+  return t.popup({
+    title:
+      "⚠ MOGELIJK DUBBEL",
+
+    items:
+      items
   });
+}
+
+
+/* =========================================================
+   CHECKLIST PROGRESS
+   ========================================================= */
+
+async function getChecklistProgress(t) {
+
+  const card =
+    await t.card(
+      "badges"
+    );
+
+  const cardBadges =
+    card.badges || {};
+
+  return {
+
+    total:
+      cardBadges.checkItems || 0,
+
+    completed:
+      cardBadges.checkItemsChecked || 0
+  };
+}
+
+
+async function getProgressBar(t) {
+
+  const progress =
+    await getChecklistProgress(t);
+
+  if (progress.total === 0) {
+    return "";
+  }
+
+  const filled =
+    Math.round(
+      (
+        progress.completed /
+        progress.total
+      ) *
+      TOTAL_PROGRESS_BLOCKS
+    );
+
+  return (
+    "█".repeat(filled) +
+    "-".repeat(
+      TOTAL_PROGRESS_BLOCKS -
+      filled
+    )
+  );
+}
+
+
+async function hasIncompleteSteps(t) {
+
+  const progress =
+    await getChecklistProgress(t);
+
+  if (progress.total === 0) {
+    return false;
+  }
+
+  return (
+    progress.completed <
+    progress.total
+  );
+}
+
+
+async function hasNoChecklistItems(t) {
+
+  const progress =
+    await getChecklistProgress(t);
+
+  return progress.total === 0;
+}
+
+
+async function getOnboardingRecoveryState(t) {
+
+  const card =
+    await t.card(
+      "checklists"
+    );
+
+  let hasOnboarding = false;
+  let hasHistoricalOffboarding = false;
+
+  (card.checklists || []).forEach(
+    checklist => {
+
+      const name =
+        String(
+          checklist.name || ""
+        ).trim();
+
+      if (
+        /^HISTORIE\s*\|\s*OFFB\s*\|/i.test(name)
+      ) {
+        hasHistoricalOffboarding = true;
+        return;
+      }
+
+      if (
+        /^OFFB\s*\|/i.test(name)
+      ) {
+        return;
+      }
+
+      hasOnboarding = true;
+    }
+  );
+
+  return {
+    hasOnboarding,
+    hasHistoricalOffboarding,
+  };
+}
+
+
+/* =========================================================
+   CARD COVER
+   ========================================================= */
+
+async function requestImmediateCoverSync(t) {
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "sync-cover",
+          cardId:
+            card.id,
+        }),
+    });
+
+  const response =
+    await fetch(
+      GUARD_COVER_URL,
+      {
+        method:
+          "POST",
+
+        headers: {
+          Authorization:
+            "Bearer " +
+            jwt,
+        },
+
+        signal:
+          AbortSignal.timeout(
+            20000
+          ),
+      }
+    );
+
+  const result =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      result.error ||
+      "Omslagsynchronisatie mislukt"
+    );
+  }
+
+  return result;
+}
+
+
+async function syncOperationalCover(t) {
+
+  try {
+
+    const card =
+      await t.card(
+        "name"
+      );
+
+    if (
+      isSourceCard(card) ||
+      isSeparatorCard(card)
+    ) {
+      return;
+    }
+
+    await requestImmediateCoverSync(t);
+
+  } catch (error) {
+
+    console.error(
+      "Omslagsynchronisatie mislukt:",
+      error
+    );
+  }
+}
+
+
+/* =========================================================
+   COMPANY SELECTION
+   ========================================================= */
+
+async function isOffboardingList(t) {
+  const list = await t.list("id");
+  return list.id === OFFBOARDING_LIST_ID;
+}
+
+async function requestImmediateOffboarding(
+  t,
+  company
+) {
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "load-offboarding",
+          cardId:
+            card.id,
+          company:
+            company || null,
+        }),
+    });
+
+  let result = null;
+
+  for (
+    let attempt = 0;
+    attempt < 3;
+    attempt++
+  ) {
+    const response =
+      await fetch(
+        GUARD_OFFB_URL,
+        {
+          method:
+            "POST",
+
+          headers: {
+            Authorization:
+              "Bearer " +
+              jwt,
+          },
+
+          signal:
+            AbortSignal.timeout(
+              20000
+            ),
+        }
+      );
+
+    result =
+      await response.json();
+
+    if (
+      response.ok &&
+      result.status !==
+        "RETRY_PENDING"
+    ) {
+      return result;
+    }
+
+    if (
+      attempt < 2
+    ) {
+      await new Promise(
+        resolve =>
+          setTimeout(
+            resolve,
+            700
+          )
+      );
+    }
+  }
+
+  return (
+    result || {
+      status:
+        "RETRY_PENDING"
+    }
+  );
+}
+
+
+async function requestImmediateOnboarding(
+  t,
+  company
+) {
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "load-onboarding",
+          cardId:
+            card.id,
+          company:
+            company,
+        }),
+    });
+
+  const response =
+    await fetch(
+      GUARD_ONB_URL,
+      {
+        method:
+          "POST",
+
+        headers: {
+          Authorization:
+            "Bearer " +
+            jwt,
+        },
+
+        signal:
+          AbortSignal.timeout(
+            20000
+          ),
+      }
+    );
+
+  const result =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      result.error ||
+      "Onboarding laden mislukt"
+    );
+  }
+
+  return result;
+}
+
+
+async function requestOffboardingReason(
+  t,
+  reason
+) {
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "set-offb-reason",
+          cardId:
+            card.id,
+          reason:
+            reason,
+        }),
+    });
+
+  const response =
+    await fetch(
+      GUARD_REASON_URL,
+      {
+        method:
+          "POST",
+
+        headers: {
+          Authorization:
+            "Bearer " +
+            jwt,
+        },
+
+        signal:
+          AbortSignal.timeout(
+            20000
+          ),
+      }
+    );
+
+  const result =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      result.error ||
+      "Uitstroomreden opslaan mislukt"
+    );
+  }
+
+  await t.set(
+    "card",
+    "shared",
+    "offbReason",
+    reason
+  );
+
+  return result;
+}
+
+
+async function saveReasonChoice(
+  t,
+  reason
+) {
+  let finalReason =
+    reason;
+
+  if (reason === "Overig") {
+    return t.popup({
+      title:
+        "Overig",
+
+      url:
+        "./offb-reason-other.html",
+
+      height:
+        190
+    });
+  }
+
+  try {
+    await requestOffboardingReason(
+      t,
+      finalReason
+    );
+
+    await t.closePopup();
+
+    await t.alert({
+      message:
+        "Uitstroomreden opgeslagen"
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    await t.alert({
+      message:
+        error.message
+    });
+  }
+}
+
+
+async function getOffboardingReasonStatus(t) {
+
+  const card =
+    await t.card(
+      "id"
+    );
+
+  const jwt =
+    await t.jwt({
+      state:
+        JSON.stringify({
+          action:
+            "get-offb-reason-status",
+          cardId:
+            card.id,
+        }),
+    });
+
+  const response =
+    await fetch(
+      GUARD_REASON_STATUS_URL,
+      {
+        method: "POST",
+        headers: {
+          Authorization:
+            `Bearer ${jwt}`,
+        },
+      }
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      "Uitstroomredenstatus ophalen mislukt"
+    );
+  }
+
+  return response.json();
+}
+
+
+function openOffboardingReasonSelector(t) {
+
+  const reasons = [
+    "Ontslagname",
+    "Einde contract",
+    "Ontslag",
+    "Interne wijziging",
+    "Langdurige afwezigheid",
+    "Overig",
+  ];
+
+  return t.popup({
+    title:
+      "Uitstroomreden",
+
+    items:
+      reasons.map(
+        reason => ({
+          text:
+            reason,
+
+          callback:
+            function(t) {
+              return saveReasonChoice(
+                t,
+                reason
+              );
+            }
+        })
+      )
+  });
+}
+
+
+async function reloadOnboarding(t) {
+
+  try {
+    const company =
+      await t.get(
+        "card",
+        "shared",
+        "company",
+        null
+      );
+
+    if (!company) {
+      throw new Error(
+        "Stel eerst een bedrijf in"
+      );
+    }
+
+    const result =
+      await requestImmediateOnboarding(
+        t,
+        company
+      );
+
+    if (
+      ![
+        "LOADED",
+        "ALREADY_LOADED",
+        "RETRY_PENDING"
+      ].includes(
+        result.status
+      )
+    ) {
+      throw new Error(
+        "Onboarding kon niet worden geladen"
+      );
+    }
+
+    await t.alert({
+      message:
+        result.status ===
+          "ALREADY_LOADED"
+          ? "Onboarding is al aanwezig"
+          : (
+              result.status ===
+                "RETRY_PENDING"
+                ? "Onboarding wordt opnieuw geprobeerd"
+                : "Ontbrekende onboarding is geladen"
+            )
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    await t.alert({
+      message:
+        error.message
+    });
+  }
+}
+
+
+async function chooseCompany(t, company) {
+  try {
+    const existingCompany = await t.get("card", "shared", "company", null);
+    if (await isOffboardingList(t)) {
+      if (existingCompany && normalizeCompany(existingCompany) !== normalizeCompany(company)) {
+        throw new Error("Bedrijf is al ingesteld op " + existingCompany);
+      }
+      // Persist first. The Guard independently reads this value from Trello.
+      await t.set("card", "shared", "company", company);
+      let message = "Bedrijf opgeslagen. De uitstroomstappen worden automatisch opnieuw geprobeerd.";
+      try {
+        const result =
+          await requestImmediateOffboarding(
+            t,
+            company
+          );
+        if (["LOADED", "ALREADY_LOADED"].includes(result.status)) {
+          message = "Uitstroomstappen voor " + company + " zijn geladen.";
+        } else if (result.status === "NOT_APPLICABLE") {
+          message = "Bedrijf opgeslagen. De kaart staat niet meer in de uitstroomlijst.";
+        }
+      } catch (error) {
+        // Company stays saved; scheduled retries remain available.
+        console.warn("Direct uitstroom laden niet beschikbaar; geplande controle volgt.");
+      }
+      await t.closePopup();
+      await t.alert({ message });
+      return;
+    }
+    // Onboarding outside the offboarding list is now
+    // loaded centrally by the Guard.
+    if (existingCompany) {
+      throw new Error(
+        "Bedrijf is al ingesteld op " +
+        existingCompany
+      );
+    }
+
+    /*
+     * Persist the company first.
+     * The Guard request may succeed in copying checklists and then hit
+     * a secondary warning-label/API issue. The company must never be
+     * lost just because a later backend step failed.
+     */
+    await t.set(
+      "card",
+      "shared",
+      "company",
+      company
+    );
+
+    const result =
+      await requestImmediateOnboarding(
+        t,
+        company
+      );
+
+    if (
+      result.status !== "LOADED" &&
+      result.status !== "ALREADY_LOADED" &&
+      result.status !== "RETRY_PENDING"
+    ) {
+      throw new Error(
+        "Bedrijf opgeslagen, maar onboarding kon niet volledig worden geladen"
+      );
+    }
+
+    await t.closePopup();
+
+    await t.alert({
+      message:
+        result.status ===
+          "ALREADY_LOADED"
+          ? "Onboarding is al aanwezig. Bedrijf ingesteld op " +
+            company
+          : (
+              result.status ===
+                "RETRY_PENDING"
+                ? "Bedrijf is opgeslagen. Onboarding wordt opnieuw geprobeerd."
+                : "Onboarding voor " +
+                  company +
+                  " is geladen"
+            )
+    });
+  } catch (error) {
+    console.error(error);
+    await t.alert({ message: error.message });
+  }
+}
+
+
+/* =========================================================
+   DYNAMIC COMPANY MENU
+   ========================================================= */
+
+async function openCompanySelector(t) {
+
+  const sourceCards =
+    await getSourceCards(t);
+
+
+  const activeSourceCards =
+    sourceCards.filter(
+      function(source) {
+
+        return !source.inactive;
+      }
+    );
+
+
+  if (
+    activeSourceCards.length === 0
+  ) {
+
+    return t.alert({
+
+      message:
+        "Geen actieve onboardingssjablonen gevonden"
+    });
+  }
+
+
+  const uniqueCompanies =
+    new Map();
+
+
+  activeSourceCards.forEach(
+    function(source) {
+
+      if (
+        !uniqueCompanies.has(
+          source.companyKey
+        )
+      ) {
+
+        uniqueCompanies.set(
+          source.companyKey,
+          source.company
+        );
+      }
+    }
+  );
+
+
+  const items =
+    Array
+      .from(
+        uniqueCompanies.values()
+      )
+
+      .sort(function(a, b) {
+
+        return a.localeCompare(b);
+      })
+
+      .map(
+        function(company) {
+
+          return {
+
+            text:
+              company,
+
+            callback:
+              function(t) {
+
+                return chooseCompany(
+                  t,
+                  company
+                );
+              }
+          };
+        }
+      );
+
+
+  return t.popup({
+
+    title:
+      "Selecteer bedrijf",
+
+    items:
+      items
+  });
+}
+
+
+/* =========================================================
+   DASHBOARD
+   ========================================================= */
+
+function openNktrDashboard(
+  t
+) {
+  return t.modal({
+    url:
+      DASHBOARD_URL,
+
+    title:
+      "INZICHTEN",
+
+    fullscreen:
+      true
+  });
+}
+
+
+/* =========================================================
+   POWER-UP
+   ========================================================= */
+
+window.TrelloPowerUp.initialize({
+
+
+  /* -------------------------------------------------------
+     BOARD DASHBOARD
+     ------------------------------------------------------- */
+
+  "board-buttons":
+    function(t) {
+
+      return [{
+
+        text:
+          "INZICHTEN ▼",
+
+        condition:
+          "edit",
+
+        callback:
+          function(t) {
+
+            return openNktrDashboard(
+              t
+            );
+          }
+      }];
+    },
+
+
+  /* -------------------------------------------------------
+     OPEN CARD
+     ------------------------------------------------------- */
+
+  "card-detail-badges":
+    async function(t) {
+
+
+      const card =
+        await t.card(
+          "name"
+        );
+
+
+      if (isSeparatorCard(card)) {
+        return [];
+      }
+
+
+      if (isSourceCard(card)) {
+
+        const badges = [];
+
+
+        try {
+          const sourceWarning =
+            await getSourcePermissionWarning(
+              t
+            );
+
+          if (sourceWarning.active) {
+            badges.push({
+              title:
+                "Beveiligde bronkaart",
+              text:
+                "🔒 Alleen beheerders",
+              color:
+                "purple"
+            });
+          }
+        } catch (error) {
+          console.error(
+            "Bronkaart-waarschuwing mislukt:",
+            error
+          );
+        }
+
+
+        const duplicateCompany =
+          await isDuplicateCompanyTemplate(
+            t
+          );
+
+
+        if (duplicateCompany) {
+
+          badges.push({
+
+            title:
+              "Waarschuwing",
+
+            text:
+              "Dubbel bedrijf",
+
+            color:
+              "red"
+          });
+        }
+
+
+        const empty =
+          await isTemplateEmpty(t);
+
+
+        if (empty) {
+
+          badges.push({
+
+            title:
+              "Waarschuwing",
+
+            text:
+              "Sjabloon leeg",
+
+            color:
+              "red"
+          });
+        }
+
+
+        return badges;
+      }
+
+
+      const badges = [];
+
+      /*
+       * These three reads do not depend on each other. Running them in
+       * parallel prevents the duplicate check from serially delaying the
+       * company and list state.
+       */
+      const [
+        duplicateResult,
+        companyResult,
+        listResult
+      ] = await Promise.allSettled([
+        getDuplicateStatus(t),
+        t.get(
+          "card",
+          "shared",
+          "company",
+          null
+        ),
+        t.list("id")
+      ]);
+
+      const duplicateStatus =
+        duplicateResult.status ===
+          "fulfilled"
+          ? duplicateResult.value
+          : {
+              duplicate: false,
+              matches: []
+            };
+
+      if (
+        duplicateResult.status ===
+        "rejected"
+      ) {
+        console.error(
+          "Dubbelcontrole mislukt:",
+          duplicateResult.reason
+        );
+      }
+
+      if (duplicateStatus.duplicate) {
+        badges.push({
+          title: "Waarschuwing",
+          text: "⚠ MOGELIJK DUBBEL",
+          color: "yellow",
+          callback:
+            function(t) {
+              return openDuplicatePopup(
+                t,
+                duplicateStatus
+              );
+            }
+        });
+      }
+
+      const company =
+        companyResult.status ===
+          "fulfilled"
+          ? companyResult.value
+          : null;
+
+      const inOffboarding =
+        listResult.status ===
+          "fulfilled" &&
+        listResult.value.id ===
+          OFFBOARDING_LIST_ID;
+
+      if (company) {
+        badges.push({
+          title: "Bedrijf",
+          text: company,
+          callback:
+            inOffboarding
+              ? function(t) {
+                  return chooseCompany(
+                    t,
+                    company
+                  );
+                }
+              : undefined
+        });
+      } else {
+        badges.push({
+          title: "Bedrijf",
+          text: "Bedrijf instellen",
+          callback:
+            function(t) {
+              return openCompanySelector(t);
+            }
+        });
+      }
+
+      if (inOffboarding) {
+        let reasonState = null;
+
+        try {
+          reasonState =
+            await getOffboardingReasonStatus(
+              t
+            );
+        } catch (error) {
+          console.error(
+            "Reason status lookup failed",
+            error
+          );
+        }
+
+        const fallbackReason =
+          await t.get(
+            "card",
+            "shared",
+            "offbReason",
+            null
+          );
+
+        const offbReason =
+          reasonState
+            ? reasonState.reason
+            : fallbackReason;
+
+        const reasonMissing =
+          reasonState
+            ? Boolean(
+                reasonState.missing
+              )
+            : !offbReason;
+
+        badges.push({
+          title: "Uitstroomreden",
+          text:
+            offbReason ||
+            "Reden toevoegen",
+          color:
+            reasonMissing
+              ? "yellow"
+              : null,
+          callback:
+            function(t) {
+              return openOffboardingReasonSelector(
+                t
+              );
+            }
+        });
+
+      } else if (company) {
+        const recoveryState =
+          await getOnboardingRecoveryState(
+            t
+          );
+
+        /*
+         * Do not show a transient "Onboarding laden" button while
+         * onboarding is still being copied after a fresh company choice.
+         * The recovery action is only relevant after a completed
+         * offboarding cycle has been preserved as HISTORIE | OFFB | ...
+         * and the employee currently has no onboarding checklist.
+         */
+        if (
+          !recoveryState.hasOnboarding &&
+          recoveryState.hasHistoricalOffboarding
+        ) {
+          badges.push({
+            title: "Onboarding",
+            text: "Onboarding laden",
+            callback:
+              function(t) {
+                return reloadOnboarding(t);
+              }
+          });
+        }
+      }
+
+      return badges;
+    },
+
+
+  /* -------------------------------------------------------
+     CLOSED CARD
+     ------------------------------------------------------- */
+
+  "card-badges":
+    async function(t) {
+
+
+      const card =
+        await t.card(
+          "name"
+        );
+
+
+      if (isSeparatorCard(card)) {
+        return [];
+      }
+
+
+      if (isSourceCard(card)) {
+
+        return [{
+
+          dynamic:
+            async function() {
+
+
+              try {
+                const sourceWarning =
+                  await getSourcePermissionWarning(
+                    t
+                  );
+
+                if (sourceWarning.active) {
+                  return {
+                    text:
+                      "🔒 Alleen beheerders",
+                    color:
+                      "purple",
+                    refresh:
+                      60
+                  };
+                }
+              } catch (error) {
+                console.error(
+                  "Bronkaart-waarschuwing mislukt:",
+                  error
+                );
+              }
+
+
+              const duplicateCompany =
+                await isDuplicateCompanyTemplate(
+                  t
+                );
+
+
+              if (duplicateCompany) {
+
+                return {
+
+                  text:
+                    "⚠ DUBBEL BEDRIJF",
+
+                  color:
+                    "red",
+
+                  refresh:
+                    60
+                };
+              }
+
+
+              const empty =
+                await isTemplateEmpty(
+                  t
+                );
+
+
+              return {
+
+                text:
+                  empty
+                    ? "⚠ SJABLOON LEEG"
+                    : "",
+
+                color:
+                  empty
+                    ? "red"
+                    : null,
+
+                refresh:
+                  60
+              };
+            }
+        }];
+      }
+
+
+      const list =
+        await t.list(
+          "name"
+        );
+
+
+      if (
+        list.name ===
+        FULLY_OPERATIONAL_LIST
+      ) {
+
+        return [{
+
+          dynamic:
+            async function() {
+
+
+              const progress =
+                await getChecklistProgress(
+                  t
+                );
+
+              const noChecklist =
+                progress.total === 0;
+
+              const incomplete =
+                !noChecklist &&
+                progress.completed <
+                  progress.total;
+
+
+              return {
+
+                text:
+                  noChecklist
+                    ? "⚠ GEEN ONBOARDING"
+                    : (
+                        incomplete
+                          ? "⚠ ONVOLLEDIG"
+                          : ""
+                      ),
+
+                color:
+                  (noChecklist || incomplete)
+                    ? "red"
+                    : null,
+
+                refresh:
+                  30
+              };
+            }
+        }];
+      }
+
+
+      const badges = [];
+
+
+      badges.push({
+
+        dynamic:
+          async function() {
+
+
+            const progress =
+              await getProgressBar(
+                t
+              );
+
+
+            return {
+
+              text:
+                progress,
+
+              refresh:
+                30
+            };
+          }
+      });
+
+
+      const company =
+        await t.get(
+          "card",
+          "shared",
+          "company",
+          null
+        );
+
+
+      if (company) {
+
+        badges.push({
+
+          text:
+            company
+        });
+      }
+
+
+      return badges;
+    }
+
+
+}, {
+
+  clientId:
+    CLIENT_ID,
+
+  redirectUri:
+    REDIRECT_URI
+
+});
+
 </script>
+
 </body>
 </html>
