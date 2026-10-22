@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Checklist bijwerken | NKTR</title>
+  <style>
+    body {font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:#253047;margin:0;padding:16px;}
+    h1 {font-size:17px;margin:0 0 5px;} p {margin:5px 0 16px;color:#506078;}
+    .entry {padding:12px 0;border-top:1px solid #e4e7ef;}
+    .name {font-weight:600;margin-bottom:3px;overflow-wrap:anywhere;}
+    .list {font-size:12px;color:#718096;margin-bottom:9px;overflow-wrap:anywhere;}
+    .choices {display:flex;gap:14px;flex-wrap:wrap;}
+    label {cursor:pointer;white-space:nowrap;} input {accent-color:#3167b6;}
+    footer {position:sticky;bottom:0;padding-top:12px;padding-bottom:4px;background:#fff;border-top:1px solid #eee;}
+    button {background:#3167b6;color:#fff;border:0;padding:9px 13px;border-radius:4px;cursor:pointer;}
+    button:disabled {background:#9babc3;cursor:default;}
+    #msg {font-size:12px;color:#475569;padding-top:9px;}
+  </style>
+</head>
+<body>
+  <h1>Nieuwe stappen beschikbaar</h1>
+  <p id="intro">Selecteer wat je wilt toevoegen of overslaan.</p>
+  <div id="items">Laden…</div>
+  <footer>
+    <button id="save" type="button" disabled>Keuzes opslaan</button>
+    <div id="msg">Niet gekozen = later beoordelen. Alleen beschikbaar op desktop.</div>
+  </footer>
+  <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  <script>
+    const t = window.TrelloPowerUp.iframe({
+      clientId: "VGpJ9UId4pH0TheoJUoTuVczLidyM3IQ",
+      redirectUri: "https://maricenktr.github.io/nktr-trello-onboarding/oauth-callback.html"
+    });
+    const BASE = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/steps";
+    let steps = [];
+    const $ = id => document.getElementById(id);
+    async function call(action, url, data) {
+      const card = await t.card("id");
+      const jwt = await t.jwt({ state: JSON.stringify({action, cardId:card.id}) });
+      const res = await fetch(url, {
+        method:"POST", headers: {
+          Authorization:"Bearer "+jwt,
+          ...(data ? {"Content-Type":"application/json"} : {}),
+        },
+        body:data?JSON.stringify(data):undefined,
+        signal:AbortSignal.timeout(20000)
+      });
+      const payload = await res.json();
+      if(!res.ok) throw new Error(payload.error || "Verzoek mislukt");
+      return payload;
+    }
+    function render() {
+      const parent = $("items"); parent.replaceChildren();
+      $("save").disabled = !steps.length;
+      if (!steps.length) { parent.textContent="Geen nieuwe stappen om te beoordelen."; return; }
+      steps.forEach((item, idx) => {
+        const row=document.createElement("div"); row.className="entry";
+        const name=document.createElement("div");name.className="name";name.textContent=item.name;
+        const list=document.createElement("div");list.className="list";list.textContent=item.checklist;
+        const choices=document.createElement("div");choices.className="choices";
+        [["ADD","Toevoegen"],["SKIP","Overslaan"],["","Later"]].forEach(([value,label]) => {
+          const wrapper=document.createElement("label");
+          const radio=document.createElement("input"); radio.type="radio";radio.name="step"+idx;
+          radio.value=value;radio.checked=value==="";
+          wrapper.append(radio,document.createTextNode(" "+label));choices.append(wrapper);
+        });
+        row.append(name,list,choices);parent.append(row);
+      });
+    }
+    async function load() {
+      const result=await call("step-status",BASE+"/status");
+      steps=result.items || [];
+      $("intro").textContent= result.process === "OFFB"
+        ? "Nieuwe uitstroomstappen voor "+result.company+". Kies per stap."
+        : "Nieuwe onboardingstappen voor "+result.company+". Kies per stap.";
+      render();
+    }
+    $("save").addEventListener("click",async()=>{
+      const decisions=[];
+      steps.forEach((step,idx)=>{
+        const selected=document.querySelector('input[name="step'+idx+'"]:checked');
+        if(selected?.value) decisions.push({id:step.id,choice:selected.value});
+      });
+      if(!decisions.length) {$("msg").textContent="Geen wijzigingen geselecteerd.";return;}
+      $("save").disabled=true; $("msg").textContent="Opslaan…";
+      try {
+        const result=await call("step-decide",BASE+"/decide",{decisions});
+        $("msg").textContent=result.added+" toegevoegd, "+result.skipped+" overgeslagen.";
+        await load();
+        if(!steps.length) { await t.alert({message:"Alle nieuwe stappen beoordeeld."}); await t.closePopup(); }
+      } catch(e) {$("msg").textContent=e.message;$("save").disabled=false;}
+    });
+    load().catch(err=>{ $("items").textContent=err.message;$("msg").textContent="Ververs de kaart en probeer opnieuw."; });
+  </script>
+</body>
+</html>
