@@ -1981,6 +1981,23 @@ window.TrelloPowerUp.initialize({
         });
       }
 
+      // Compact + Stappen indicator on the FRONT of each card.
+      // Reads Trello's existing labels, avoiding one Cloudflare call per card.
+      // The Guard creates/removes the native + Stappen label when needed.
+      badges.push({
+        dynamic: async function() {
+          try {
+            const current = await t.card("labels");
+            const hasNewSteps = (current.labels || []).some(function(label) {
+              return String(label.name || "").trim() === "+ Stappen";
+            });
+            return { text: hasNewSteps ? "✚" : "", refresh: 45 };
+          } catch (error) {
+            console.warn("+ Stappen voorzijde niet geladen", error);
+            return { text: "", refresh: 60 };
+          }
+        }
+      });
 
       return badges;
     }
