@@ -28,6 +28,8 @@ const GUARD_ONB_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trell
 const GUARD_COVER_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/cover/sync";
 const GUARD_REASON_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/reason";
 const GUARD_REASON_STATUS_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/reason/status";
+const GUARD_STEPS_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/steps/status";
+
 
 const TOTAL_PROGRESS_BLOCKS = 10;
 
@@ -636,6 +638,31 @@ async function openDuplicatePopup(
   });
 }
 
+
+/* =========================================================
+   OPTIONAL TEMPLATE STEP UPDATES (+ Stappen)
+   ========================================================= */
+
+async function getNewStepStatus(t) {
+  const card = await t.card("id");
+  const jwt = await t.jwt({ state: JSON.stringify({
+    action: "step-status", cardId: card.id,
+  }) });
+  const response = await fetch(GUARD_STEPS_URL, {
+    method: "POST", headers: { Authorization: "Bearer " + jwt },
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!response.ok) throw new Error("Nieuwe stappen ophalen mislukt");
+  return response.json();
+}
+
+function openStepUpdateWindow(t) {
+  return t.popup({
+    title: "Checklist bijwerken",
+    url: "./steps.html",
+    height: 520,
+  });
+}
 
 /* =========================================================
    CHECKLIST PROGRESS
@@ -1654,6 +1681,21 @@ window.TrelloPowerUp.initialize({
               return openCompanySelector(t);
             }
         });
+      }
+
+      // Contextual card-detail update button, only when review items exist.
+      // Trello + Stappen board label remains visible to mobile users.
+      try {
+        const stepStatus = await getNewStepStatus(t);
+        if ((stepStatus.items || []).length) {
+          badges.push({
+            title: "Nieuwe stappen beschikbaar (alleen desktop)",
+            text: "Checklist bijwerken",
+            callback: function(t) { return openStepUpdateWindow(t); }
+          });
+        }
+      } catch (error) {
+        console.warn("Stappenbadge ophalen mislukt", error);
       }
 
       if (inOffboarding) {
