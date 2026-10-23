@@ -281,6 +281,17 @@
       font-weight: 650;
     }
 
+    .metric-count {
+      font-weight: 750;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .company-heat-key {
+      margin: 8px 0 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
     .empty {
       color: var(--muted);
       padding: 24px 0;
@@ -487,6 +498,12 @@
 
       <p class="section-sub">
         Huidige status per medewerker. Onboarded telt medewerkers die minimaal één keer Fully Operational hebben bereikt. Archief telt alleen opgeschoonde, herkenbare medewerkerkaarten die nog in Trello bestaan. Afwijkend traject is een extra indicator en kan naast een huidige status voorkomen.
+      </p>
+
+      <p class="company-heat-key">
+        Per kolom: <span style="color:#579dff">●</span> laag ·
+        <span style="color:#4bce97">●</span> midden ·
+        <span style="color:#f87168">●</span> hoog
       </p>
 
       <div style="overflow-x:auto">
@@ -1055,69 +1072,59 @@
     }
 
 
+    // Compare each company with the maximum in THAT column, never with the
+    // global board total. The values remain ordinary numbers, not percentages.
+    const companyStatusFields = [
+      "onboarding", "onboarded", "operational", "offboarding",
+      "offboarded", "afwijkend"
+    ];
+
+    function companyHeatColor(value, maximum) {
+      const dark = window.matchMedia &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches;
+      // Both palettes preserve contrast on the corresponding background.
+      const colors = dark
+        ? [[87, 157, 255], [75, 206, 151], [248, 113, 104]]
+        : [[29, 94, 179], [17, 114, 66], [188, 48, 56]];
+      const ratio = maximum > 0
+        ? Math.max(0, Math.min(1, value / maximum))
+        : 0;
+      const segment = ratio <= 0.5 ? 0 : 1;
+      const weight = segment === 0 ? ratio * 2 : (ratio - 0.5) * 2;
+      const color = colors[segment].map(function(start, i) {
+        return Math.round(start +
+          (colors[segment + 1][i] - start) * weight);
+      });
+      return "rgb(" + color.join(",") + ")";
+    }
+
     function renderCompanies(
       rows
     ) {
-
-      const body =
-        document.getElementById(
-          "companies"
-        );
-
-
-      if (
-        !rows.length
-      ) {
-
+      const body = document.getElementById("companies");
+      if (!rows.length) {
         body.innerHTML =
           '<tr><td colspan="7" class="empty">Nog geen medewerkergegevens beschikbaar.</td></tr>';
-
         return;
       }
 
+      const maximums = {};
+      companyStatusFields.forEach(function(field) {
+        maximums[field] = Math.max(0, ...rows.map(function(row) {
+          return Math.max(0, Number(row[field]) || 0);
+        }));
+      });
 
-      body.innerHTML =
-        rows.map(
-          function(row) {
-
-            return (
-              '<tr>' +
-
-                '<td>' +
-                  escapeHtml(
-                    row.company
-                  ) +
-                '</td>' +
-
-                '<td>' +
-                  (row.onboarding || 0) +
-                '</td>' +
-
-                '<td>' +
-                  (row.onboarded || 0) +
-                '</td>' +
-
-                '<td>' +
-                  (row.operational || 0) +
-                '</td>' +
-
-                '<td>' +
-                  (row.offboarding || 0) +
-                '</td>' +
-
-                '<td>' +
-                  (row.offboarded || 0) +
-                '</td>' +
-
-                '<td>' +
-                  (row.afwijkend || 0) +
-                '</td>' +
-
-              '</tr>'
-            );
-          }
-        )
-          .join("");
+      body.innerHTML = rows.map(function(row) {
+        const cells = companyStatusFields.map(function(field) {
+          const value = Math.max(0, Number(row[field]) || 0);
+          return '<td><span class="metric-count" style="color:' +
+            companyHeatColor(value, maximums[field]) + '">' +
+            value + '</span></td>';
+        }).join("");
+        return '<tr><td>' + escapeHtml(row.company) +
+          '</td>' + cells + '</tr>';
+      }).join("");
     }
 
 
