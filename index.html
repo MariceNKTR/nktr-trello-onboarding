@@ -1981,37 +1981,8 @@ window.TrelloPowerUp.initialize({
         });
       }
 
-      // Compact + Stappen indicator on the FRONT of the employee card.
-      // The native label is the cheap first choice. Some boards do not show
-      // that label even though the Guard confirms pending template steps.
-      // In that case, fall back to the SAME signed step-status endpoint used
-      // by the working 'Checklist bijwerken' badge inside the employee card.
-      // Refresh at most every ten minutes to avoid a request storm on boards.
-      if (company) {
-        badges.push({
-          dynamic: async function() {
-            try {
-              const current = await t.card("labels");
-              const hasNativeLabel = (current.labels || []).some(function(label) {
-                return String(label.name || "").trim() === "+ Stappen";
-              });
-              if (hasNativeLabel) {
-                return { text: "✚", refresh: 600 };
-              }
-
-              // Fallback: the backend already proves these steps exist when
-              // the card is open. Don't make card-front visibility depend on
-              // the separate Trello label write succeeding.
-              const status = await getNewStepStatus(t);
-              const hasPending = Array.isArray(status.items) && status.items.length > 0;
-              return { text: hasPending ? "✚" : "", refresh: 600 };
-            } catch (error) {
-              console.warn("+ Stappen voorzijde niet geladen", error);
-              return { text: "", refresh: 300 };
-            }
-          }
-        });
-      }
+      // The single native label "+ Stappen · PC" is visible on desktop and
+      // mobile. Do not generate a duplicate Power-Up card-front badge.
 
       return badges;
     }
