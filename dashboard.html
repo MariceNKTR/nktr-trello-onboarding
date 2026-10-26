@@ -13,6 +13,10 @@
       --text: #172b4d;
       --muted: #6b778c;
       --line: #dfe1e6;
+      --onboarding: #2462a5;
+      --operational: #187a58;
+      --offboarding: #956115;
+      --exception: #b03a44;
     }
 
     @media (prefers-color-scheme: dark) {
@@ -22,6 +26,10 @@
         --text: #f1f2f4;
         --muted: #9fadbc;
         --line: #454f59;
+        --onboarding: #79acef;
+        --operational: #59c99c;
+        --offboarding: #eac37a;
+        --exception: #ed8d92;
       }
     }
 
@@ -65,7 +73,7 @@
       border: 1px solid var(--line);
       background: var(--panel);
       color: var(--text);
-      border-radius: 8px;
+      border-radius: 4px;
       padding: 8px 12px;
       cursor: pointer;
       font-weight: 600;
@@ -87,7 +95,7 @@
     .card {
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 12px;
+      border-radius: 0;
       padding: 16px;
     }
 
@@ -135,21 +143,13 @@
       width: 10px;
       height: 10px;
       margin-right: 6px;
-      border-radius: 2px;
+      border-radius: 0;
       background: currentColor;
     }
 
-    .legend .onb {
-      color: #579dff;
-    }
-
-    .legend .offb {
-      color: #f87168;
-    }
-
-    .legend .op {
-      color: #4bce97;
-    }
+    .legend .onb { color: var(--onboarding); }
+    .legend .offb { color: var(--offboarding); }
+    .legend .op { color: var(--operational); }
 
     .chart {
       min-height: 280px;
@@ -182,37 +182,14 @@
 
     .bar {
       width: 28%;
-      min-height: 2px;
+      min-height: 0;
       position: relative;
-      border-radius: 4px 4px 0 0;
+      border-radius: 0;
     }
 
-    .bar.onb {
-      background: linear-gradient(
-        180deg,
-        rgba(87, 157, 255, 0.88) 0%,
-        rgba(87, 157, 255, 0.24) 100%
-      );
-      border: 1px solid rgba(87, 157, 255, 0.40);
-    }
-
-    .bar.offb {
-      background: linear-gradient(
-        180deg,
-        rgba(248, 113, 104, 0.88) 0%,
-        rgba(248, 113, 104, 0.24) 100%
-      );
-      border: 1px solid rgba(248, 113, 104, 0.40);
-    }
-
-    .bar.op {
-      background: linear-gradient(
-        180deg,
-        rgba(75, 206, 151, 0.88) 0%,
-        rgba(75, 206, 151, 0.24) 100%
-      );
-      border: 1px solid rgba(75, 206, 151, 0.40);
-    }
+    .bar.onb { background: var(--onboarding); }
+    .bar.offb { background: var(--offboarding); }
+    .bar.op { background: var(--operational); }
 
     .bar:hover::after {
       content: attr(data-value);
@@ -238,8 +215,8 @@
 
     .reason-row {
       display: grid;
-      grid-template-columns: minmax(110px, 1fr) 2fr 34px;
-      gap: 10px;
+      grid-template-columns: minmax(135px, 1.2fr) minmax(60px, 2fr) 32px;
+      gap: 12px;
       align-items: center;
       margin: 10px 0;
       font-size: 13px;
@@ -249,13 +226,13 @@
       height: 9px;
       overflow: hidden;
       background: var(--line);
-      border-radius: 999px;
+      border-radius: 0;
     }
 
     .fill {
       height: 100%;
-      background: #6554c0;
-      border-radius: 999px;
+      background: var(--offboarding);
+      border-radius: 0;
     }
 
     table {
@@ -289,6 +266,21 @@
     .metric-count-zero {
       font-weight: 400;
       color: var(--text);
+    }
+
+    /* Shared semantic palette: the same status means the same color everywhere. */
+    .status-onboarding { color: var(--onboarding); }
+    .status-operational { color: var(--operational); }
+    .status-offboarding { color: var(--offboarding); }
+    .status-exception { color: var(--exception); }
+
+    .kpi-value.is-zero {
+      color: var(--text);
+      font-weight: 400;
+    }
+
+    .reason-name {
+      overflow-wrap: anywhere;
     }
 
     .company-heat-key {
@@ -506,9 +498,8 @@
       </p>
 
       <p class="company-heat-key">
-        Per kolom: <span style="color:#579dff">●</span> laag ·
-        <span style="color:#4bce97">●</span> midden ·
-        <span style="color:#ffe678">●</span> hoog
+        Kleur = status: blauw onboarding, groen operationeel, amber uitstroom.
+        Het getal toont het aantal. 0 blijft neutraal.
       </p>
 
       <div style="overflow-x:auto">
@@ -865,6 +856,22 @@
           0;
 
 
+      // Apply exactly the same semantic colors as the chart and company table.
+      [
+        ["k-onb", "status-onboarding"],
+        ["k-onboarded", "status-onboarding"],
+        ["k-op", "status-operational"],
+        ["k-offb", "status-offboarding"],
+        ["k-out", "status-offboarding"],
+        ["k-archive", ""],
+        ["k-dev", "status-exception"]
+      ].forEach(function(entry) {
+        const el = document.getElementById(entry[0]);
+        const value = Number(el.textContent) || 0;
+        el.className = "kpi-value" +
+          (value === 0 ? " is-zero" : entry[1] ? " " + entry[1] : "");
+      });
+
       renderMovements(
         data.movements ||
         []
@@ -946,16 +953,9 @@
               value
             ) {
 
-              return Math.max(
-                2,
-                Math.round(
-                  (
-                    value /
-                    max
-                  ) *
-                  180
-                )
-              );
+              return value > 0
+                ? Math.max(2, Math.round((value / max) * 180))
+                : 0;
             }
 
 
@@ -1047,9 +1047,9 @@
             return (
               '<div class="reason-row">' +
 
-                '<div>' +
+                '<div class="reason-name">' +
                   escapeHtml(
-                    row.reason
+                    String(row.reason || "").replace(/([a-zà-ÿ])([A-ZÀ-Ý])/g, "$1 $2")
                   ) +
                 '</div>' +
 
@@ -1077,35 +1077,20 @@
     }
 
 
-    // Compare each company with the maximum in THAT column, never with the
-    // global board total. The values remain ordinary numbers, not percentages.
+    // Stable, shared semantic colors. A color means a status, not a rank.
     const companyStatusFields = [
       "onboarding", "onboarded", "operational", "offboarding",
       "offboarded", "afwijkend"
     ];
 
-    function companyHeatColor(value, maximum) {
-      if (value <= 0 || maximum <= 0) {
-        return null;
-      }
-
-      const dark = window.matchMedia &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches;
-
-      // Blue -> green -> lemon yellow
-      const colors = dark
-        ? [[87, 157, 255], [75, 206, 151], [255, 230, 120]]
-        : [[29, 94, 179], [17, 114, 66], [196, 163, 0]];
-
-      const ratio = Math.max(0, Math.min(1, value / maximum));
-      const segment = ratio <= 0.5 ? 0 : 1;
-      const weight = segment === 0 ? ratio * 2 : (ratio - 0.5) * 2;
-      const color = colors[segment].map(function(start, i) {
-        return Math.round(start +
-          (colors[segment + 1][i] - start) * weight);
-      });
-      return "rgb(" + color.join(",") + ")";
-    }
+    const companyStatusClasses = {
+      onboarding: "status-onboarding",
+      onboarded: "status-onboarding",
+      operational: "status-operational",
+      offboarding: "status-offboarding",
+      offboarded: "status-offboarding",
+      afwijkend: "status-exception"
+    };
 
     function renderCompanies(
       rows
@@ -1117,20 +1102,13 @@
         return;
       }
 
-      const maximums = {};
-      companyStatusFields.forEach(function(field) {
-        maximums[field] = Math.max(0, ...rows.map(function(row) {
-          return Math.max(0, Number(row[field]) || 0);
-        }));
-      });
-
       body.innerHTML = rows.map(function(row) {
         const cells = companyStatusFields.map(function(field) {
           const value = Math.max(0, Number(row[field]) || 0);
-          const color = companyHeatColor(value, maximums[field]);
-          const classes = value > 0 ? 'metric-count' : 'metric-count metric-count-zero';
-          const style = color ? ' style="color:' + color + '"' : '';
-          return '<td><span class="' + classes + '"' + style + '>' +
+          const classes = value > 0
+            ? 'metric-count ' + companyStatusClasses[field]
+            : 'metric-count metric-count-zero';
+          return '<td><span class="' + classes + '">' +
             value + '</span></td>';
         }).join("");
         return '<tr><td>' + escapeHtml(row.company) +
