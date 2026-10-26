@@ -1511,16 +1511,22 @@ window.TrelloPowerUp.initialize({
      from card-detail-badges. The button appears in Trello's Power-Ups
      card menu (rocket icon in the modern card interface).
      ------------------------------------------------------- */
-  "card-buttons": async function(t) {
-    const card = await t.card("name");
-    if (isSeparatorCard(card) || isSourceCard(card)) {
-      return [];
-    }
+  "card-buttons": function(t) {
+    // Register immediately so a slow card read cannot hide this action.
+    // Verify the card type when the user actually clicks the button.
     return [{
       icon: "https://maricenktr.github.io/nktr-trello-onboarding/proposal-icon.svg",
       text: "Stap voorstellen",
       condition: "edit",
-      callback: function(t) { return openProposals(t, true); }
+      callback: async function(t) {
+        const card = await t.card("name");
+        if (isSeparatorCard(card) || isSourceCard(card)) {
+          return t.alert({
+            message: "Stap voorstellen is alleen beschikbaar op medewerkerskaarten."
+          });
+        }
+        return openProposals(t, true);
+      }
     }];
   },
 
@@ -1646,6 +1652,14 @@ window.TrelloPowerUp.initialize({
 
 
       const badges = [];
+
+      // A direct, clickable entry on employee cards. This remains accessible
+      // even when Trello hides card-buttons inside the bottom Power-Ups menu.
+      badges.push({
+        title: "Voorstellen",
+        text: "Stap voorstellen",
+        callback: function(t) { return openProposals(t, true); }
+      });
 
       /*
        * These three reads do not depend on each other. Running them in
