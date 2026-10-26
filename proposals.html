@@ -1,1 +1,266 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stap voorstellen | NKTR</title>
+<link rel="stylesheet" href="https://p.trellocdn.com/power-up.min.css">
+<style>
+:root {--bg:#fff;--fg:#172b4d;--muted:#44546f;--line:#dfe1e6;--panel:#f7f8fa;--accent:#0c66e4;--contrast:#fff;--warn:#946200}
+html[data-color-mode="dark"] {color-scheme:dark;--bg:#22272b;--fg:#dee4ea;--muted:#b6c2cf;--line:#454f59;--panel:#2c333a;--accent:#579dff;--contrast:#1d2125;--warn:#e2bc62}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--fg)}
+body{font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:18px;max-width:1080px;margin:auto}
+h1{font-size:21px;margin:0 0 4px}h2{font-size:16px;margin:0 0 8px}h3{font-size:14px;margin:0 0 8px}
+p{margin:4px 0 12px;color:var(--muted)}.muted{color:var(--muted);font-size:12px}.small{font-size:12px}
+section{padding:17px 0;border-bottom:1px solid var(--line)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+label{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px}
+input,select,textarea{width:100%;padding:9px 10px;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:4px;min-height:39px}
+textarea{resize:vertical;min-height:64px}button{font:inherit;cursor:pointer;border:1px solid var(--line);border-radius:4px;padding:8px 11px;background:var(--panel);color:var(--fg);font-weight:600}
+button.primary{background:var(--accent);color:var(--contrast);border-color:transparent}button:disabled{opacity:.48;cursor:not-allowed}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px}.entry{border:1px solid var(--line);border-radius:4px;padding:12px;margin:10px 0}
+.entry.active{border-color:var(--accent)}.entry header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:space-between}
+.tag{display:inline-block;font-size:11px;background:var(--panel);border:1px solid var(--line);padding:2px 6px;border-radius:4px}
+.attention{font-weight:650;color:var(--warn)}.panel{background:var(--panel);padding:12px;margin:10px 0;border:1px solid var(--line);border-radius:4px}
+#msg{min-height:20px;font-size:12px;margin:9px 0;color:var(--muted)}.error{color:#d25454!important}.success{color:#18875f!important}
+.target{border-bottom:1px solid var(--line);padding:5px 0}.hidden{display:none!important}
+@media(max-width:600px){body{padding:12px}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<h1>Stap voorstellen</h1>
+<p>Office ziet alleen eigen voorstellen. Bordbeheerders kunnen alle voorstellen beoordelen. Alleen desktop.</p>
+<div id="msg" role="status" aria-live="polite">Voorstellen laden…</div>
+<section>
+  <h2 id="formTitle">Nieuw voorstel</h2>
+  <form id="proposalForm">
+    <div class="grid">
+      <div><label for="company">Bedrijf</label><select id="company" required></select></div>
+      <div><label for="process">Proces</label><select id="process"><option value="ONB">Onboarding (ONB)</option><option value="OFFB">Uitstroom (OFFB)</option></select></div>
+      <div id="phaseWrap"><label for="phase">FASE / checklist</label><select id="phase" required></select></div>
+    </div>
+    <div style="margin-top:10px"><label for="stepText">Nieuwe stap</label>
+      <textarea id="stepText" maxlength="280" placeholder="Beschrijf de ontbrekende stap…" required></textarea></div>
+    <div class="actions"><button class="primary" type="submit" id="save">Voorstel indienen</button>
+      <button type="button" id="cancelEdit" class="hidden">Bewerken annuleren</button></div>
+  </form>
+</section>
+<section>
+  <h2 id="myTitle">Mijn voorstellen</h2>
+  <div id="mine"></div>
+</section>
+<section id="adminSection" class="hidden">
+  <h2>Beheerder · Goedkeuringswachtrij</h2>
+  <p>Voorstellen met <strong>Aandacht gevraagd</strong> staan bovenaan. Geen automatische meldingen.</p>
+  <div id="queue"></div>
+  <div id="reviewPanel" class="panel hidden">
+    <h3 id="reviewTitle">Beoordelen</h3>
+    <div class="grid">
+      <div><label for="reviewText">Definitieve tekst</label><textarea id="reviewText" maxlength="280"></textarea></div>
+      <div><label for="reviewCompany">Bedrijf (voor bedrijfsgericht)</label><select id="reviewCompany"></select></div>
+      <div id="reviewPhaseWrap"><label for="reviewPhase">FASE / checklist</label><select id="reviewPhase"></select></div>
+      <div><label for="reviewScope">Toepassing</label><select id="reviewScope"><option value="COMPANY">Alleen dit bedrijf</option><option value="ALL">Alle toepasselijke bedrijven</option></select></div>
+    </div>
+    <div class="actions"><button id="preview" type="button">Voorbeeld bekijken</button><button id="approve" class="primary" type="button" disabled>Definitief goedkeuren</button></div>
+    <div id="previewResult" class="panel hidden" aria-live="polite"></div>
+    <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
+    <label for="rejectReason">Afwijzingsreden (optioneel)</label>
+    <textarea id="rejectReason" maxlength="400" placeholder="Toelichting…"></textarea>
+    <div class="actions"><button id="reject" type="button">Afwijzen</button><button id="cancelReview" type="button">Sluiten</button></div>
+  </div>
+</section>
+<script src="https://p.trellocdn.com/power-up.min.js"></script>
+<script>
+(()=>{
+"use strict";
+const t=window.TrelloPowerUp.iframe({
+ clientId:"VGpJ9UId4pH0TheoJUoTuVczLidyM3IQ",
+ redirectUri:"https://maricenktr.github.io/nktr-trello-onboarding/oauth-callback.html"
+});
+const API="https://nktr-trello-guard.marice-angulo.workers.dev/trello/proposals/";
+const $=id=>document.getElementById(id);
+let data=null,editing=null,reviewing=null,approvedPreview=null,busy=false;
+let cardId=String(t.arg("cardId","")||"");
+if(!/^[a-f0-9]{24}$/.test(cardId))cardId="";
+function message(msg,error=false){$("msg").textContent=msg;$("msg").className=error?"error":"";}
+function text(el,text){el.textContent=String(text??"");return el}
+function node(tag,cls,content){const n=document.createElement(tag);if(cls)n.className=cls;if(content!=null)n.textContent=content;return n}
+function button(label,fn,primary=false){const b=node("button",primary?"primary":"",label);b.type="button";b.addEventListener("click",fn);return b}
+function fillSelect(select,choices,value){select.replaceChildren();choices.forEach(({value:v,label:l})=>{
+ const o=document.createElement("option");o.value=v;o.textContent=l;select.append(o)});
+ if(value!=null&&choices.some(x=>x.value===value))select.value=value;}
+function setOptions(s,value){fillSelect(s,data.companies.map(x=>({value:x.name,label:x.name})),value)}
+function phasesFor(company){return data?.companies.find(c=>c.name===company)?.phases||[]}
+function syncPhase(which=""){
+ const review=which==="review";
+ const process=review?reviewing?.process:$("process").value;
+ const phase=review?$("reviewPhase"):$("phase");
+ const company=review?$("reviewCompany").value:$("company").value;
+ const wrap=review?$("reviewPhaseWrap"):$("phaseWrap");
+ wrap.classList.toggle("hidden",process==="OFFB");
+ if(process==="OFFB"){fillSelect(phase,[{value:"OFFB",label:"OFFB (geen FASE)"}],"OFFB");return;}
+ const previous=phase.value;fillSelect(phase,phasesFor(company).map(s=>({value:s,label:s})),previous);
+ if(!phase.value){phase.selectedIndex=0;}
+}
+async function call(action,path,body){
+ const jwt=await t.jwt({state:JSON.stringify({action,...(cardId?{cardId}:{})})});
+ const response=await fetch(API+path,{method:"POST",headers:{Authorization:"Bearer "+jwt,
+  ...(body?{"Content-Type":"application/json"}:{})},body:body?JSON.stringify(body):undefined,
+  signal:AbortSignal.timeout(20000)});
+ const json=await response.json().catch(()=>({}));
+ if(!response.ok)throw new Error(json.error||"Verzoek mislukt ("+response.status+")");
+ return json;
+}
+async function refresh(initial=false){
+ data=await call("proposal-overview","overview");
+ $("adminSection").classList.toggle("hidden",!data.is_admin);
+ if(initial){
+  const company=data.context?.company;
+  setOptions($("company"),company);
+  $("process").value=data.context?.process||"ONB";
+  syncPhase();
+ }
+ render();message("Bijgewerkt.");
+}
+function makeEntry(p,isAdmin){
+ const div=node("article","entry"),header=node("header");
+ header.append(node("strong","",p.text),node("span","tag",{
+ PENDING:"Open",APPLYING:"Verwerken",APPROVED:"Goedgekeurd",
+ REJECTED:"Afgewezen",WITHDRAWN:"Ingetrokken"}[p.status]||p.status));
+ div.append(header,node("div","muted",p.process+" · "+p.company+" · "+p.phase));
+ if(p.attention_at){
+  div.append(node("div","attention small","Aandacht gevraagd"));
+  if(isAdmin&&p.attention_note)div.append(node("div","muted","Toelichting: "+p.attention_note));
+ }
+ if(p.status==="APPROVED")div.append(node("div","muted","Goedgekeurd: "+(p.final_text||"")+
+  " · "+(p.scope==="ALL"?"Alle bedrijven":"Bedrijf")));
+ if(p.status==="REJECTED"&&p.rejection_reason)div.append(node("div","muted","Reden: "+p.rejection_reason));
+ if(p.status==="APPLYING"&&p.error)div.append(node("div","error small","Verwerking onderbroken: "+p.error));
+ const acts=node("div","actions");
+ if(p.status==="PENDING"&&p.author_id===data.me){
+   acts.append(button("Bewerken",()=>beginEdit(p)),button("Intrekken",()=>withdraw(p)));
+   if(!p.attention_at){
+     acts.append(button("Vraag aandacht",()=>showAttention(div,p)));
+   }
+ }
+ if(isAdmin&&p.status==="PENDING")acts.append(button("Beoordelen",()=>beginReview(p),true));
+ if(isAdmin&&p.status==="APPLYING")acts.append(button("Verwerking hervatten",()=>resume(p),true));
+ div.append(acts);
+ return div;
+}
+function render(){
+ const mine=$("mine");mine.replaceChildren();
+ const authored=data.proposals.filter(p=>p.author_id===data.me);
+ if(!authored.length)mine.append(node("p","muted","Je hebt nog geen voorstellen ingediend."));
+ authored.forEach(p=>mine.append(makeEntry(p,false)));
+ if(!data.is_admin)return;
+ const queue=$("queue");queue.replaceChildren();
+ const active=data.proposals.filter(p=>["PENDING","APPLYING"].includes(p.status));
+ if(!active.length)queue.append(node("p","muted","Geen open voorstellen."));
+ active.forEach(p=>queue.append(makeEntry(p,true)));
+ const history=data.proposals.filter(p=>!["PENDING","APPLYING"].includes(p.status)).slice(0,25);
+ if(history.length){queue.append(node("h3","","Recent afgehandeld"));history.forEach(p=>queue.append(makeEntry(p,false)));}
+}
+function beginEdit(p){
+ editing=p.id;$("formTitle").textContent="Voorstel bewerken";
+ $("save").textContent="Wijzigingen opslaan";$("cancelEdit").classList.remove("hidden");
+ setOptions($("company"),p.company);$("process").value=p.process;syncPhase();
+ if(p.process==="ONB"&&phasesFor(p.company).includes(p.phase))$("phase").value=p.phase;
+ $("stepText").value=p.text;window.scrollTo({top:0,behavior:"smooth"});
+}
+function cancelEdit(){editing=null;$("formTitle").textContent="Nieuw voorstel";
+ $("save").textContent="Voorstel indienen";$("cancelEdit").classList.add("hidden");$("stepText").value="";}
+async function submit(e){
+ e.preventDefault();if(busy)return;
+ const values={id:editing,company:$("company").value,process:$("process").value,
+ phase:$("process").value==="OFFB"?"OFFB":$("phase").value,text:$("stepText").value.trim()};
+ busy=true;$("save").disabled=true;
+ try{await call("proposal-save","save",values);cancelEdit();await refresh();message("Voorstel opgeslagen.");}
+ catch(e){message(e.message,true)}finally{busy=false;$("save").disabled=false;}
+}
+async function withdraw(p){
+ if(!confirm("Dit voorstel intrekken?"))return;
+ try{await call("proposal-withdraw","withdraw",{id:p.id});await refresh();message("Voorstel ingetrokken.")}
+ catch(e){message(e.message,true)}
+}
+function showAttention(parent,p){
+ if(parent.querySelector(".attentionForm"))return;
+ const section=node("div","panel attentionForm");
+ const sel=node("select"), note=node("textarea");
+ note.placeholder="Korte uitleg (optioneel)";note.maxLength=220;
+ fillSelect(sel,data.admins.map(m=>({value:m.id,label:m.name})),null);
+ section.append(node("label","","Kies één beheerder"),sel,node("label","","Uitleg (alleen in goedkeuringswachtrij)"),note);
+ section.append(button("Eenmalig melden",async()=>{
+  try{await call("proposal-attention","attention",{id:p.id,adminId:sel.value,note:note.value});
+   await refresh();message("Een Trello @mention is verstuurd.");}
+  catch(e){message(e.message,true)}},true));
+ parent.append(section);
+}
+function beginReview(p){
+ reviewing=p;approvedPreview=null;
+ $("reviewPanel").classList.remove("hidden");$("reviewTitle").textContent="Beoordelen: "+p.text;
+ $("reviewText").value=p.text;setOptions($("reviewCompany"),p.company);
+ $("reviewScope").value="COMPANY";syncPhase("review");
+ if(p.process==="ONB"&&phasesFor(p.company).includes(p.phase))$("reviewPhase").value=p.phase;
+ $("previewResult").classList.add("hidden");$("approve").disabled=true;
+ $("reviewPanel").scrollIntoView({behavior:"smooth",block:"start"});
+}
+function reviewValues(){return{id:reviewing?.id,text:$("reviewText").value.trim(),
+ company:$("reviewCompany").value,phase:reviewing?.process==="OFFB"?"OFFB":$("reviewPhase").value,
+ scope:$("reviewScope").value};}
+function invalidatePreview(){approvedPreview=null;$("approve").disabled=true;
+ $("previewResult").classList.add("hidden");}
+async function preview(){
+ if(!reviewing)return;
+ try{
+  const result=await call("proposal-preview","preview",reviewValues());
+  approvedPreview=result.valid?result:null;
+  const out=$("previewResult");out.replaceChildren();out.classList.remove("hidden");
+  out.append(node("strong","",result.valid?"Klaar voor bevestiging":"Kan nog niet goedgekeurd worden"));
+  out.append(node("div","small","Tekst: "+result.text));
+  out.append(node("div","small","Proces: "+reviewing.process+" · "+result.phase+
+    " · "+(result.scope==="ALL"?"Alle toepasselijke bedrijven":"Alleen "+result.company)));
+  result.targets.forEach(t=>out.append(node("div","target small",
+    (t.duplicate?"BESTAAT AL: ":"Toevoegen aan: ")+t.company+" → "+t.checklist)));
+  result.missing.forEach(m=>out.append(node("div","error small","Ontbreekt: "+m.company+" · "+m.phase)));
+  $("approve").disabled=!result.valid;
+  if(!result.valid)message("Corrigeer de tekst, FASE of het bereik.",true);
+  else message("Controleer het voorbeeld en bevestig daarna.");
+ }catch(e){message(e.message,true);invalidatePreview()}
+}
+async function approve(){
+ if(!reviewing||!approvedPreview)return;
+ const values=reviewValues();
+ if(!confirm("Definitief goedkeuren en stappen toevoegen aan de getoonde bronnen?"))return;
+ $("approve").disabled=true;
+ try{await call("proposal-review","review",{...values,operation:"APPROVE",
+  previewDigest:approvedPreview.digest});closeReview();await refresh();message("Goedgekeurd. De bronchecklists zijn bijgewerkt.");}
+ catch(e){message(e.message,true);invalidatePreview();await refresh(false).catch(()=>{});}
+}
+async function reject(){
+ if(!reviewing)return;
+ if(!confirm("Dit voorstel afwijzen?"))return;
+ try{await call("proposal-review","review",{id:reviewing.id,operation:"REJECT",
+  reason:$("rejectReason").value.trim()});closeReview();await refresh();message("Voorstel afgewezen.");}
+ catch(e){message(e.message,true)}
+}
+async function resume(p){
+ try{await call("proposal-review","review",{id:p.id,operation:"RESUME"});await refresh();message("Goedkeuring afgerond.");}
+ catch(e){message(e.message,true)}
+}
+function closeReview(){reviewing=null;approvedPreview=null;$("reviewPanel").classList.add("hidden");}
+$("company").addEventListener("change",()=>syncPhase());
+$("process").addEventListener("change",()=>syncPhase());
+$("proposalForm").addEventListener("submit",submit);
+$("cancelEdit").addEventListener("click",cancelEdit);
+$("reviewCompany").addEventListener("change",()=>{syncPhase("review");invalidatePreview()});
+["reviewText","reviewScope","reviewPhase"].forEach(id=>$(id).addEventListener("input",invalidatePreview));
+$("preview").addEventListener("click",preview);
+$("approve").addEventListener("click",approve);
+$("reject").addEventListener("click",reject);
+$("cancelReview").addEventListener("click",closeReview);
+refresh(true).catch(e=>message(e.message,true));
+})();
+</script>
+</body>
+</html>
 
