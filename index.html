@@ -132,6 +132,7 @@ function isSeparatorCard(card) {
       : "";
 
   return (
+    name === "🔔 ONB | Goedkeuringen" ||
     name.startsWith("──") ||
     /^↓{2,}/.test(name)
   );
@@ -662,6 +663,41 @@ function openStepUpdateWindow(t) {
     url: "./steps.html",
     height: 520,
   });
+}
+
+/* =========================================================
+   STAP VOORSTELLEN - open from board or employee card
+   ========================================================= */
+
+const GUARD_PROPOSAL_SUMMARY = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/proposals/summary";
+
+async function openProposals(t, fromCard = false) {
+  const card = fromCard ? await t.card("id") : null;
+  return t.modal({
+    title: "Stap voorstellen",
+    url: "./proposals.html",
+    height: 760,
+    fullscreen: false,
+    args: {cardId: card?.id || ""},
+  });
+}
+
+async function getProposalsButton(t) {
+  let text = "Voorstellen";
+  try {
+    const jwt = await t.jwt({state:JSON.stringify({action:"proposal-summary"})});
+    const response = await fetch(GUARD_PROPOSAL_SUMMARY,{
+      method:"POST",headers:{Authorization:"Bearer "+jwt},
+      signal:AbortSignal.timeout(8000),
+    });
+    if (response.ok) {
+      const result=await response.json();
+      text = result.is_admin ? "Voorstellen ("+result.pending_count+")" : "Mijn voorstellen";
+    }
+  } catch(error) {
+    console.warn("Voorstellenaantal niet beschikbaar",error);
+  }
+  return {text,condition:"edit",callback:function(t){return openProposals(t,false)}};
 }
 
 /* =========================================================
@@ -1475,8 +1511,9 @@ window.TrelloPowerUp.initialize({
      ------------------------------------------------------- */
 
   "board-buttons":
-    function(t) {
+    async function(t) {
 
+      const proposalsButton = await getProposalsButton(t);
       return [{
 
         text:
@@ -1492,7 +1529,7 @@ window.TrelloPowerUp.initialize({
               t
             );
           }
-      }];
+      }, proposalsButton];
     },
 
 
@@ -1682,6 +1719,12 @@ window.TrelloPowerUp.initialize({
             }
         });
       }
+
+      badges.push({
+        title: "Stap voorstellen",
+        text: "Stap voorstellen",
+        callback: function(t) { return openProposals(t,true); }
+      });
 
       // Contextual card-detail update button, only when review items exist.
       // Trello + Stappen board label remains visible to mobile users.
