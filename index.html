@@ -1505,6 +1505,24 @@ function openNktrDashboard(
 
 window.TrelloPowerUp.initialize({
 
+  /* -------------------------------------------------------
+     EMPLOYEE CARD: Stap voorstellen
+     The native card-buttons capability must be registered separately
+     from card-detail-badges. The button appears in Trello's Power-Ups
+     card menu (rocket icon in the modern card interface).
+     ------------------------------------------------------- */
+  "card-buttons": async function(t) {
+    const card = await t.card("name");
+    if (isSeparatorCard(card) || isSourceCard(card)) {
+      return [];
+    }
+    return [{
+      icon: "https://maricenktr.github.io/nktr-trello-onboarding/proposal-icon.svg",
+      text: "Stap voorstellen",
+      condition: "edit",
+      callback: function(t) { return openProposals(t, true); }
+    }];
+  },
 
   /* -------------------------------------------------------
      BOARD DASHBOARD
@@ -1719,12 +1737,6 @@ window.TrelloPowerUp.initialize({
             }
         });
       }
-
-      badges.push({
-        title: "Stap voorstellen",
-        text: "Stap voorstellen",
-        callback: function(t) { return openProposals(t,true); }
-      });
 
       // Contextual card-detail update button, only when review items exist.
       // Trello + Stappen board label remains visible to mobile users.
