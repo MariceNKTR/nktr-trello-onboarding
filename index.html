@@ -29,6 +29,33 @@ const GUARD_COVER_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/tre
 const GUARD_REASON_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/reason";
 const GUARD_REASON_STATUS_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/reason/status";
 const GUARD_STEPS_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/steps/status";
+const PARKING_NAME = "Parking";
+const GUARD_PARKING_STATUS_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/parking/status";
+const GUARD_PARKING_ARCHIVE_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/parking/archive";
+
+async function parkingSignedCall(t,action,url) {
+  const card=await t.card("id");
+  const jwt=await t.jwt({state:JSON.stringify({action,cardId:card.id})});
+  const response=await fetch(url,{method:"POST",headers:{Authorization:"Bearer "+jwt},
+    signal:AbortSignal.timeout(16000)});
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(result.error||"Parking-actie mislukt");
+  return result;
+}
+
+function confirmParkingArchive(t) {
+  return t.popup({title:"Parking archiveren?",items:[{
+    text:"Bevestig: kaart archiveren",callback:async function(t){
+      try {
+        const result=await parkingSignedCall(t,"parking-archive",GUARD_PARKING_ARCHIVE_URL);
+        if(result.status!=="ARCHIVED")throw new Error("Archivering niet voltooid.");
+        await t.closePopup();
+        return t.alert({message:"Kaart gearchiveerd."});
+      }catch(error){return t.alert({message:error.message||"Archiveren mislukt"});}
+    }
+  }]});
+}
+
 
 
 const TOTAL_PROGRESS_BLOCKS = 10;
@@ -1666,20 +1693,17 @@ window.TrelloPowerUp.initialize({
        * parallel prevents the duplicate check from serially delaying the
        * company and list state.
        */
-      const [
-        duplicateResult,
-        companyResult,
-        listResult
-      ] = await Promise.allSettled([
-        getDuplicateStatus(t),
-        t.get(
-          "card",
-          "shared",
-          "company",
-          null
-        ),
-        t.list("id")
-      ]);
+      const listPromise = t.list("id", "name");
+      const stepPromise = listPromise.then(list => list.name === PARKING_NAME
+        ? {items: []} : getNewStepStatus(t));
+      const reasonPromise = listPromise.then(list => list.id === OFFBOARDING_LIST_ID
+        ? getOffboardingReasonStatus(t) : null);
+      const [duplicateResult,companyResult,listResult,stepResult,reasonResult] =
+        await Promise.allSettled([
+          getDuplicateStatus(t),
+          t.get("card","shared","company",null),
+          listPromise,stepPromise,reasonPromise
+        ]);
 
       const duplicateStatus =
         duplicateResult.status ===
@@ -1715,17 +1739,14 @@ window.TrelloPowerUp.initialize({
         });
       }
 
-      const company =
-        companyResult.status ===
-          "fulfilled"
-          ? companyResult.value
-          : null;
+      const company = (companyResult.status === "fulfilled" ? companyResult.value : null) ||
+        (stepResult.status === "fulfilled" ? stepResult.value?.company : null) || null;
 
       const inOffboarding =
-        listResult.status ===
-          "fulfilled" &&
-        listResult.value.id ===
-          OFFBOARDING_LIST_ID;
+        listResult.status === "fulfilled" &&
+        listResult.value.id === OFFBOARDING_LIST_ID;
+      const inParking = listResult.status === "fulfilled" &&
+        listResult.value.name === PARKING_NAME;
 
       if (company) {
         badges.push({
@@ -1752,35 +1773,35 @@ window.TrelloPowerUp.initialize({
         });
       }
 
+      // Parking requires no Power-Up actions except Admin's confirmed archive.
+      if (inParking) {
+        try {
+          const archive = await parkingSignedCall(t,"parking-status",GUARD_PARKING_STATUS_URL);
+          if(archive.can_archive){
+            badges.push({title:"Parking",text:"Archiveren",
+              callback:function(t){return confirmParkingArchive(t);}});
+          }
+        }catch(error){console.warn("Parking actiecontrole",error);}
+        return badges;
+      }
+
       // Contextual card-detail update button, only when review items exist.
       // Trello + Stappen board label remains visible to mobile users.
-      try {
-        const stepStatus = await getNewStepStatus(t);
-        if ((stepStatus.items || []).length) {
-          badges.push({
-            title: "Nieuwe stappen beschikbaar (alleen desktop)",
-            text: "Checklist bijwerken",
-            callback: function(t) { return openStepUpdateWindow(t); }
-          });
-        }
-      } catch (error) {
-        console.warn("Stappenbadge ophalen mislukt", error);
+      if(stepResult.status === "fulfilled" && (stepResult.value?.items||[]).length) {
+        badges.push({
+          title:"Nieuwe stappen beschikbaar (alleen desktop)",
+          text:"Checklist bijwerken",
+          callback:function(t){return openStepUpdateWindow(t);}
+        });
+      } else if(stepResult.status === "rejected") {
+        console.warn("Stappenbadge ophalen mislukt",stepResult.reason);
       }
 
       if (inOffboarding) {
-        let reasonState = null;
-
-        try {
-          reasonState =
-            await getOffboardingReasonStatus(
-              t
-            );
-        } catch (error) {
-          console.error(
-            "Reason status lookup failed",
-            error
-          );
-        }
+        const reasonState = reasonResult.status === "fulfilled"
+          ? reasonResult.value : null;
+        if(reasonResult.status === "rejected")
+          console.warn("Uitstroomredenstatus laden mislukt",reasonResult.reason);
 
         const fallbackReason =
           await t.get(
@@ -1806,7 +1827,7 @@ window.TrelloPowerUp.initialize({
           title: "Uitstroomreden",
           text:
             offbReason ||
-            "Reden toevoegen",
+            "+ OFFB-reden",
           color:
             reasonMissing
               ? "yellow"
