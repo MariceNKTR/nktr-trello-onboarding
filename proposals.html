@@ -17,7 +17,7 @@ input,select,textarea{width:100%;padding:9px 10px;font:inherit;color:var(--fg);b
 textarea{resize:vertical;min-height:64px}button{font:inherit;cursor:pointer;border:1px solid var(--line);border-radius:4px;padding:8px 11px;background:var(--panel);color:var(--fg);font-weight:600}
 button.primary{background:var(--accent);color:var(--contrast);border-color:transparent}button:disabled{opacity:.48;cursor:not-allowed}
 button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px}.entry{border:1px solid var(--line);border-radius:4px;padding:12px;margin:10px 0}
+.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px}#proposalTabs button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}.entry{border:1px solid var(--line);border-radius:4px;padding:12px;margin:10px 0}
 .entry.active{border-color:var(--accent)}.entry header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:space-between}
 .tag{display:inline-block;font-size:11px;background:var(--panel);border:1px solid var(--line);padding:2px 6px;border-radius:4px}
 .attention{font-weight:650;color:var(--warn)}.panel{background:var(--panel);padding:12px;margin:10px 0;border:1px solid var(--line);border-radius:4px}
@@ -45,19 +45,25 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   </form>
 </section>
 <section>
-  <h2 id="myTitle">Mijn voorstellen</h2>
-  <div id="mine"></div>
+  <h2>Voorstellen</h2>
+  <div class="actions" id="proposalTabs" role="group" aria-label="Voorstellen filteren">
+    <button type="button" id="tabOpen" class="active" aria-pressed="true">Open</button>
+    <button type="button" id="tabMine" aria-pressed="false">Van mij</button>
+    <button type="button" id="tabAssigned" class="hidden" aria-pressed="false">Voor mij</button>
+    <button type="button" id="tabHistory" aria-pressed="false">Geschiedenis</button>
+  </div>
+  <div id="unified"></div>
 </section>
 <section id="adminSection" class="hidden">
-  <h2>Beheerder · Goedkeuringswachtrij</h2>
-  <p>Voorstellen met <strong>Aandacht gevraagd</strong> staan bovenaan. Geen automatische meldingen.</p>
-  <div id="queue"></div>
   <div id="reviewPanel" class="panel hidden">
     <h3 id="reviewTitle">Beoordelen</h3>
     <div class="grid">
       <div><label for="reviewText">Definitieve tekst</label><textarea id="reviewText" maxlength="280"></textarea></div>
       <div><label for="reviewCompany">Bedrijf (voor bedrijfsgericht)</label><select id="reviewCompany"></select></div>
       <div id="reviewPhaseWrap"><label for="reviewPhase">FASE / checklist</label><select id="reviewPhase"></select></div>
+      <div id="reviewOffbTargetWrap" class="hidden"><label for="reviewOffbTarget">OFFB doelchecklist</label>
+        <select id="reviewOffbTarget"><option value="STANDARD">OFFB | STANDAARD (alle fallbackbedrijven)</option>
+          <option value="COMPANY">OFFB | geselecteerd bedrijf</option></select></div>
       <div><label for="reviewScope">Toepassing</label><select id="reviewScope"><option value="COMPANY">Alleen dit bedrijf</option><option value="ALL">Alle toepasselijke bedrijven</option></select></div>
     </div>
     <div class="actions"><button id="preview" type="button">Voorbeeld bekijken</button><button id="approve" class="primary" type="button" disabled>Definitief goedkeuren</button></div>
@@ -78,7 +84,7 @@ const t=window.TrelloPowerUp.iframe({
 });
 const API="https://nktr-trello-guard.marice-angulo.workers.dev/trello/proposals/";
 const $=id=>document.getElementById(id);
-let data=null,editing=null,reviewing=null,approvedPreview=null,busy=false;
+let data=null,editing=null,reviewing=null,approvedPreview=null,busy=false,activeTab="open";
 let cardId=String(t.arg("cardId","")||"");
 if(!/^[a-f0-9]{24}$/.test(cardId))cardId="";
 function message(msg,error=false){$("msg").textContent=msg;$("msg").className=error?"error":"";}
@@ -97,7 +103,12 @@ function syncPhase(which=""){
  const company=review?$("reviewCompany").value:$("company").value;
  const wrap=review?$("reviewPhaseWrap"):$("phaseWrap");
  wrap.classList.toggle("hidden",process==="OFFB");
- if(process==="OFFB"){fillSelect(phase,[{value:"OFFB",label:"OFFB (geen FASE)"}],"OFFB");return;}
+ if(process==="OFFB"){
+  fillSelect(phase,[{value:"OFFB",label:"OFFB (geen FASE)"}],"OFFB");
+  if(review){$("reviewOffbTargetWrap").classList.toggle("hidden",$("reviewScope").value==="ALL");}
+  return;
+ }
+ if(review)$("reviewOffbTargetWrap").classList.add("hidden");
  const previous=phase.value;fillSelect(phase,phasesFor(company).map(s=>({value:s,label:s})),previous);
  if(!phase.value){phase.selectedIndex=0;}
 }
@@ -113,6 +124,7 @@ async function call(action,path,body){
 async function refresh(initial=false){
  data=await call("proposal-overview","overview");
  $("adminSection").classList.toggle("hidden",!data.is_admin);
+ $("tabAssigned").classList.toggle("hidden",!data.is_admin);
  if(initial){
   const company=data.context?.company;
   setOptions($("company"),company);
@@ -128,7 +140,9 @@ function makeEntry(p,isAdmin){
  REJECTED:"Afgewezen",WITHDRAWN:"Ingetrokken"}[p.status]||p.status));
  div.append(header,node("div","muted",p.process+" · "+p.company+" · "+p.phase));
  if(p.attention_at){
-  div.append(node("div","attention small","Aandacht gevraagd"));
+  const assignee=["PENDING","APPLYING"].includes(p.status) ? data.admins.find(a=>a.id===p.attention_admin_id) : null;
+  div.append(node("div","attention small","Aandacht gevraagd"+
+    (assignee?" · Toegewezen aan: "+assignee.name:"")));
   if(isAdmin&&p.attention_note)div.append(node("div","muted","Toelichting: "+p.attention_note));
  }
  if(p.status==="APPROVED")div.append(node("div","muted","Goedgekeurd: "+(p.final_text||"")+
@@ -148,17 +162,22 @@ function makeEntry(p,isAdmin){
  return div;
 }
 function render(){
- const mine=$("mine");mine.replaceChildren();
- const authored=data.proposals.filter(p=>p.author_id===data.me);
- if(!authored.length)mine.append(node("p","muted","Je hebt nog geen voorstellen ingediend."));
- authored.forEach(p=>mine.append(makeEntry(p,false)));
- if(!data.is_admin)return;
- const queue=$("queue");queue.replaceChildren();
- const active=data.proposals.filter(p=>["PENDING","APPLYING"].includes(p.status));
- if(!active.length)queue.append(node("p","muted","Geen open voorstellen."));
- active.forEach(p=>queue.append(makeEntry(p,true)));
- const history=data.proposals.filter(p=>!["PENDING","APPLYING"].includes(p.status)).slice(0,25);
- if(history.length){queue.append(node("h3","","Recent afgehandeld"));history.forEach(p=>queue.append(makeEntry(p,false)));}
+ const all=data.proposals||[];
+ const pending=p=>["PENDING","APPLYING"].includes(p.status);
+ const display=activeTab==="open"?all.filter(pending):
+  activeTab==="mine"?all.filter(p=>pending(p)&&p.author_id===data.me):
+  activeTab==="assigned"?all.filter(p=>pending(p)&&p.attention_admin_id===data.me):
+  all.filter(p=>!pending(p));
+ const out=$("unified");out.replaceChildren();
+ const count=all.filter(pending).length;
+ $("tabOpen").textContent="Open ("+count+")";
+ ["open","mine","assigned","history"].forEach(key=>{
+  const el=$({open:"tabOpen",mine:"tabMine",assigned:"tabAssigned",history:"tabHistory"}[key]);
+  el.setAttribute("aria-pressed",activeTab===key?"true":"false");
+  el.classList.toggle("active",activeTab===key);
+ });
+ if (!display.length)out.append(node("p","muted","Geen voorstellen in deze weergave."));
+ display.forEach(p=>out.append(makeEntry(p,Boolean(data.is_admin))));
 }
 function beginEdit(p){
  editing=p.id;$("formTitle").textContent="Voorstel bewerken";
@@ -199,14 +218,14 @@ function beginReview(p){
  reviewing=p;approvedPreview=null;
  $("reviewPanel").classList.remove("hidden");$("reviewTitle").textContent="Beoordelen: "+p.text;
  $("reviewText").value=p.text;setOptions($("reviewCompany"),p.company);
- $("reviewScope").value="COMPANY";syncPhase("review");
+ $("reviewScope").value="COMPANY";$("reviewOffbTarget").value="STANDARD";syncPhase("review");
  if(p.process==="ONB"&&phasesFor(p.company).includes(p.phase))$("reviewPhase").value=p.phase;
  $("previewResult").classList.add("hidden");$("approve").disabled=true;
  $("reviewPanel").scrollIntoView({behavior:"smooth",block:"start"});
 }
 function reviewValues(){return{id:reviewing?.id,text:$("reviewText").value.trim(),
  company:$("reviewCompany").value,phase:reviewing?.process==="OFFB"?"OFFB":$("reviewPhase").value,
- scope:$("reviewScope").value};}
+ scope:$("reviewScope").value,offbTarget:$("reviewOffbTarget").value};}
 function invalidatePreview(){approvedPreview=null;$("approve").disabled=true;
  $("previewResult").classList.add("hidden");}
 async function preview(){
@@ -217,8 +236,11 @@ async function preview(){
   const out=$("previewResult");out.replaceChildren();out.classList.remove("hidden");
   out.append(node("strong","",result.valid?"Klaar voor bevestiging":"Kan nog niet goedgekeurd worden"));
   out.append(node("div","small","Tekst: "+result.text));
-  out.append(node("div","small","Proces: "+reviewing.process+" · "+result.phase+
-    " · "+(result.scope==="ALL"?"Alle toepasselijke bedrijven":"Alleen "+result.company)));
+  const targetScope = reviewing.process === "OFFB" && result.scope === "COMPANY" &&
+    $("reviewOffbTarget").value === "STANDARD"
+    ? "OFFB STANDAARD: alle bedrijven die deze standaard gebruiken"
+    : result.scope === "ALL" ? "Alle toepasselijke bedrijven" : "Alleen "+result.company;
+  out.append(node("div","small","Proces: "+reviewing.process+" · "+result.phase+" · "+targetScope));
   result.targets.forEach(t=>out.append(node("div","target small",
     (t.duplicate?"BESTAAT AL: ":"Toevoegen aan: ")+t.company+" → "+t.checklist)));
   result.missing.forEach(m=>out.append(node("div","error small","Ontbreekt: "+m.company+" · "+m.phase)));
@@ -253,7 +275,10 @@ $("process").addEventListener("change",()=>syncPhase());
 $("proposalForm").addEventListener("submit",submit);
 $("cancelEdit").addEventListener("click",cancelEdit);
 $("reviewCompany").addEventListener("change",()=>{syncPhase("review");invalidatePreview()});
-["reviewText","reviewScope","reviewPhase"].forEach(id=>$(id).addEventListener("input",invalidatePreview));
+["reviewText","reviewScope","reviewPhase","reviewOffbTarget"].forEach(id=>$(id).addEventListener("input",invalidatePreview));
+$("reviewScope").addEventListener("change",()=>syncPhase("review"));
+[["tabOpen","open"],["tabMine","mine"],["tabAssigned","assigned"],["tabHistory","history"]]
+ .forEach(([id,key])=>$(id).addEventListener("click",()=>{activeTab=key;render();}));
 $("preview").addEventListener("click",preview);
 $("approve").addEventListener("click",approve);
 $("reject").addEventListener("click",reject);
@@ -263,4 +288,3 @@ refresh(true).catch(e=>message(e.message,true));
 </script>
 </body>
 </html>
-
