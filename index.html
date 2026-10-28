@@ -43,6 +43,50 @@ async function parkingSignedCall(t,action,url) {
   return result;
 }
 
+// Trello can temporarily return an outdated/missing list context after a move.
+// Cross-check the card's current idList before deciding which actions to show.
+async function getReliableEmployeeList(t) {
+  const [context, card] = await Promise.allSettled([
+    t.list("id", "name"),
+    t.card("idList")
+  ]);
+  const contextual = context.status === "fulfilled" ? context.value : null;
+  const idList = card.status === "fulfilled" && card.value?.idList
+    ? card.value.idList : contextual?.id;
+  if (contextual?.name && contextual.id === idList) return contextual;
+  if (idList) {
+    try {
+      const lists = await t.lists("id", "name");
+      const found = (lists || []).find(item => item.id === idList);
+      if (found) return found;
+    } catch (error) {
+      console.warn("Kaartlijst opnieuw ophalen mislukt", error);
+    }
+  }
+  return {id: idList || null, name: contextual?.id === idList ? contextual?.name || "" : ""};
+}
+
+// Used only if the Guard's status endpoint is temporarily unavailable.
+// The Guard still makes the final, authoritative Admin/checklist checks.
+async function locallyVerifiedParkingAdmin(t) {
+  try {
+    const [board, member] = await Promise.all([
+      t.board("memberships"), t.member("id")
+    ]);
+    return Boolean((board.memberships || []).some(entry =>
+      entry.idMember === member.id && entry.memberType === "admin" &&
+      !entry.unconfirmed && !entry.deactivated));
+  } catch (error) {
+    console.warn("Bordbeheerder controleren mislukt", error);
+    return false;
+  }
+}
+
+function parkingArchiveBadge() {
+  return {title:"Parking", text:"Archiveren",
+    callback:function(t){return confirmParkingArchive(t);}};
+}
+
 function confirmParkingArchive(t) {
   return t.popup({title:"Parking archiveren?",items:[{
     text:"Bevestig: kaart archiveren",callback:async function(t){
@@ -1693,7 +1737,7 @@ window.TrelloPowerUp.initialize({
        * parallel prevents the duplicate check from serially delaying the
        * company and list state.
        */
-      const listPromise = t.list("id", "name");
+      const listPromise = getReliableEmployeeList(t);
       const stepPromise = listPromise.then(list => list.name === PARKING_NAME
         ? {items: []} : getNewStepStatus(t));
       const reasonPromise = listPromise.then(list => list.id === OFFBOARDING_LIST_ID
@@ -1746,7 +1790,8 @@ window.TrelloPowerUp.initialize({
         listResult.status === "fulfilled" &&
         listResult.value.id === OFFBOARDING_LIST_ID;
       const inParking = listResult.status === "fulfilled" &&
-        listResult.value.name === PARKING_NAME;
+        String(listResult.value?.name || "").trim().toLowerCase() ===
+          PARKING_NAME.toLowerCase();
 
       if (company) {
         badges.push({
@@ -1773,15 +1818,20 @@ window.TrelloPowerUp.initialize({
         });
       }
 
-      // Parking requires no Power-Up actions except Admin's confirmed archive.
+      // Parking never offers Onboarding laden or OFFB actions. Prefer the
+      // Guard's authoritative status; a temporary status failure must not
+      // permanently hide Admin's action on an otherwise completed card.
       if (inParking) {
         try {
           const archive = await parkingSignedCall(t,"parking-status",GUARD_PARKING_STATUS_URL);
-          if(archive.can_archive){
-            badges.push({title:"Parking",text:"Archiveren",
-              callback:function(t){return confirmParkingArchive(t);}});
+          if (archive.can_archive) badges.push(parkingArchiveBadge());
+        } catch (error) {
+          console.warn("Parking actiecontrole mislukt", error);
+          // Rendering fallback only. Archive itself is still secured by Guard.
+          if (await locallyVerifiedParkingAdmin(t)) {
+            badges.push(parkingArchiveBadge());
           }
-        }catch(error){console.warn("Parking actiecontrole",error);}
+        }
         return badges;
       }
 
@@ -1857,6 +1907,22 @@ window.TrelloPowerUp.initialize({
           !recoveryState.hasOnboarding &&
           recoveryState.hasHistoricalOffboarding
         ) {
+          // Extra safeguard for legacy Parking cards with a HISTORIE checklist:
+          // query the Guard before exposing the re-onboarding action.
+          let authoritativeParking = null;
+          try {
+            authoritativeParking = await parkingSignedCall(
+              t, "parking-status", GUARD_PARKING_STATUS_URL);
+          } catch (error) {
+            console.warn("Parking-controle tijdens heractiveren mislukt", error);
+          }
+          if (authoritativeParking?.in_parking) {
+            if (authoritativeParking.can_archive) badges.push(parkingArchiveBadge());
+            return badges;
+          }
+          // Never offer a potentially dangerous reload when the list could
+          // not be identified reliably and Guard could not confirm otherwise.
+          if (!listResult.value?.name && !authoritativeParking) return badges;
           badges.push({
             title: "Onboarding",
             text: "Onboarding laden",
