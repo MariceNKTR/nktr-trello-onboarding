@@ -57,6 +57,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 <section id="adminSection" class="hidden">
   <div id="reviewPanel" class="panel hidden">
     <h3 id="reviewTitle">Beoordelen</h3>
+    <div id="reviewAuthor" class="muted" style="margin-bottom:12px"></div>
     <div class="grid">
       <div><label for="reviewText">Definitieve tekst</label><textarea id="reviewText" maxlength="280"></textarea></div>
       <div><label for="reviewCompany">Bedrijf (voor bedrijfsgericht)</label><select id="reviewCompany"></select></div>
@@ -98,6 +99,11 @@ function setOptions(s,value){fillSelect(s,data.companies.map(x=>({value:x.name,l
 function phasesFor(company){return data?.companies.find(c=>c.name===company)?.phases||[]}
 function syncPhase(which=""){
  const review=which==="review";
+ if(review){
+  const company=$('reviewCompany').value;
+  const option=$('reviewOffbTarget').querySelector('option[value="COMPANY"]');
+  if(option)option.textContent='OFFB | '+(company||'geselecteerd bedrijf');
+ }
  const process=review?reviewing?.process:$("process").value;
  const phase=review?$("reviewPhase"):$("phase");
  const company=review?$("reviewCompany").value:$("company").value;
@@ -139,6 +145,7 @@ function makeEntry(p,isAdmin){
  PENDING:"Open",APPLYING:"Verwerken",APPROVED:"Goedgekeurd",
  REJECTED:"Afgewezen",WITHDRAWN:"Ingetrokken"}[p.status]||p.status));
  div.append(header,node("div","muted",p.process+" · "+p.company+" · "+p.phase));
+ div.append(node("div","muted","Voorgesteld door: "+(p.author_name||"Onbekend bordlid")));
  if(p.attention_at){
   const assignee=["PENDING","APPLYING"].includes(p.status) ? data.admins.find(a=>a.id===p.attention_admin_id) : null;
   div.append(node("div","attention small","Aandacht gevraagd"+
@@ -208,15 +215,27 @@ function showAttention(parent,p){
  note.placeholder="Korte uitleg (optioneel)";note.maxLength=220;
  fillSelect(sel,data.admins.map(m=>({value:m.id,label:m.name})),null);
  section.append(node("label","","Kies één beheerder"),sel,node("label","","Uitleg (alleen in goedkeuringswachtrij)"),note);
- section.append(button("Eenmalig melden",async()=>{
-  try{await call("proposal-attention","attention",{id:p.id,adminId:sel.value,note:note.value});
-   await refresh();message("Een Trello @mention is verstuurd.");}
-  catch(e){message(e.message,true)}},true));
+ const send=button("Eenmalig melden",async()=>{
+  if(send.disabled)return;
+  send.disabled=true;
+  try{
+   const result=await call("proposal-attention","attention",{id:p.id,adminId:sel.value,note:note.value});
+   await refresh();
+   message(result.notification_sent?"Een Trello @mention is verstuurd.":"Voorstel toegewezen. Geen melding aan jezelf nodig.");
+  }catch(e){message(e.message,true);send.disabled=false;}
+ },true);
+ function syncAttentionButton(){
+  const own=data.admins.find(a=>a.id===data.me);
+  send.textContent=own&&own.id===sel.value?"Aan mij toewijzen":"Eenmalig melden";
+ }
+ sel.addEventListener("change",syncAttentionButton);
+ syncAttentionButton();section.append(send);
  parent.append(section);
 }
 function beginReview(p){
  reviewing=p;approvedPreview=null;
  $("reviewPanel").classList.remove("hidden");$("reviewTitle").textContent="Beoordelen: "+p.text;
+ $("reviewAuthor").textContent="Voorgesteld door: "+(p.author_name||"Onbekend bordlid");
  $("reviewText").value=p.text;setOptions($("reviewCompany"),p.company);
  $("reviewScope").value="COMPANY";$("reviewOffbTarget").value="STANDARD";syncPhase("review");
  if(p.process==="ONB"&&phasesFor(p.company).includes(p.phase))$("reviewPhase").value=p.phase;
