@@ -268,6 +268,23 @@
       color: var(--text);
     }
 
+    /* The client's existing Trello On hold label, shown as a compact count. */
+    .on-hold-pill {
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+      margin-left: 6px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #8f4b08;
+      color: #fff0d7;
+      font-size: 11px;
+      font-weight: 650;
+      line-height: 1.4;
+      vertical-align: middle;
+      font-variant-numeric: tabular-nums;
+    }
+
     /* Shared semantic palette: the same status means the same color everywhere. */
     .status-onboarding { color: var(--onboarding); }
     .status-operational { color: var(--operational); }
@@ -408,6 +425,16 @@
       </div>
 
       <div class="card">
+        <div class="kpi-label">Parking</div>
+        <div class="kpi-value" id="k-parking">–</div>
+      </div>
+
+      <div class="card">
+        <div class="kpi-label">On hold</div>
+        <div class="kpi-value" id="k-hold">–</div>
+      </div>
+
+      <div class="card">
         <div class="kpi-label">
           Archief
         </div>
@@ -494,7 +521,7 @@
       </h2>
 
       <p class="section-sub">
-        Huidige status per medewerker. Onboarded telt medewerkers die minimaal één keer Fully Operational hebben bereikt. Archief telt alleen opgeschoonde, herkenbare medewerkerkaarten die nog in Trello bestaan. Afwijkend traject is een extra indicator en kan naast een huidige status voorkomen.
+        Huidige status per medewerker. Parking telt afgeronde OFFB-kaarten die nog niet gearchiveerd zijn. Uitgestroomd omvat Parking en afgeronde gearchiveerde OFFB-kaarten. Een oranje ⏸-badge toont hoeveel kaarten binnen die actieve status On hold zijn (al inbegrepen in het hoofdgetal). Onboarded telt medewerkers die minimaal één keer Fully Operational hebben bereikt. Afwijkend traject is een extra indicator.
       </p>
 
       <p class="company-heat-key">
@@ -513,6 +540,7 @@
               <th>Onboarded</th>
               <th>Operationeel</th>
               <th>Uitstroom</th>
+              <th>Parking</th>
               <th>Uitgestroomd</th>
               <th>Afwijkend traject</th>
             </tr>
@@ -829,6 +857,9 @@
           0;
 
 
+      document.getElementById("k-parking").textContent = counts.parking || 0;
+      document.getElementById("k-hold").textContent = counts.on_hold || 0;
+
       document
         .getElementById(
           "k-out"
@@ -862,6 +893,8 @@
         ["k-onboarded", "status-onboarding"],
         ["k-op", "status-operational"],
         ["k-offb", "status-offboarding"],
+        ["k-parking", "status-offboarding"],
+        ["k-hold", "status-offboarding"],
         ["k-out", "status-offboarding"],
         ["k-archive", ""],
         ["k-dev", "status-exception"]
@@ -1080,7 +1113,7 @@
     // Stable, shared semantic colors. A color means a status, not a rank.
     const companyStatusFields = [
       "onboarding", "onboarded", "operational", "offboarding",
-      "offboarded", "afwijkend"
+      "parking", "offboarded", "afwijkend"
     ];
 
     const companyStatusClasses = {
@@ -1088,6 +1121,7 @@
       onboarded: "status-onboarding",
       operational: "status-operational",
       offboarding: "status-offboarding",
+      parking: "status-offboarding",
       offboarded: "status-offboarding",
       afwijkend: "status-exception"
     };
@@ -1098,7 +1132,7 @@
       const body = document.getElementById("companies");
       if (!rows.length) {
         body.innerHTML =
-          '<tr><td colspan="7" class="empty">Nog geen medewerkergegevens beschikbaar.</td></tr>';
+          '<tr><td colspan="8" class="empty">Nog geen medewerkergegevens beschikbaar.</td></tr>';
         return;
       }
 
@@ -1108,8 +1142,18 @@
           const classes = value > 0
             ? 'metric-count ' + companyStatusClasses[field]
             : 'metric-count metric-count-zero';
+          // Hold is a *subset* of the active status count, never additional.
+          const holdField = {
+            onboarding: "hold_onboarding",
+            operational: "hold_operational",
+            offboarding: "hold_offboarding"
+          }[field];
+          const paused = holdField ? Math.max(0, Number(row[holdField]) || 0) : 0;
+          const pauseBadge = paused > 0
+            ? '<span class="on-hold-pill" title="On hold: ' + paused + '">⏸ ' + paused + '</span>'
+            : '';
           return '<td><span class="' + classes + '">' +
-            value + '</span></td>';
+            value + '</span>' + pauseBadge + '</td>';
         }).join("");
         return '<tr><td>' + escapeHtml(row.company) +
           '</td>' + cells + '</tr>';
