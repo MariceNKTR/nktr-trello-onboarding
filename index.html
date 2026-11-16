@@ -1747,6 +1747,15 @@ window.TrelloPowerUp.initialize({
         callback: function(t) { return openProposals(t, true); }
       });
 
+      // Direct card-level action: available without opening Trello's Power-Ups menu.
+      badges.push({
+        title: "Opleiding",
+        text: "Naar Opleiding",
+        callback: function(t) {
+          return t.modal({url:"./opleiding-verwijzing.html",title:"Naar Opleiding",height:650});
+        }
+      });
+
       /*
        * These three reads do not depend on each other. Running them in
        * parallel prevents the duplicate check from serially delaying the
