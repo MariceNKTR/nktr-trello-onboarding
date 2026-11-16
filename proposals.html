@@ -127,6 +127,18 @@ async function call(action,path,body){
  if(!response.ok)throw new Error(json.error||"Verzoek mislukt ("+response.status+")");
  return json;
 }
+let proposalCounterRevision=0;
+async function invalidateBoardProposalCount(){
+ // Trello re-evaluates board-buttons when board plugin data changes.
+ // This contains no proposal details, merely a change marker.
+ try {
+  await t.set("board","shared","proposalCounterEpoch",String(Date.now())+":"+(++proposalCounterRevision));
+ } catch(error) {
+  // The proposal action already succeeded server-side. Never mask that success
+  // because a secondary UI refresh failed; reload the board as fallback.
+  console.warn("Voorstellenaantal vernieuwen mislukt",error);
+ }
+}
 async function refresh(initial=false){
  data=await call("proposal-overview","overview");
  $("adminSection").classList.toggle("hidden",!data.is_admin);
@@ -176,7 +188,8 @@ function render(){
   activeTab==="assigned"?all.filter(p=>pending(p)&&p.attention_admin_id===data.me):
   all.filter(p=>!pending(p));
  const out=$("unified");out.replaceChildren();
- const count=all.filter(pending).length;
+ const count=data.is_admin && Number.isFinite(Number(data.pending_count))
+   ? Number(data.pending_count) : all.filter(pending).length;
  $("tabOpen").textContent="Open ("+count+")";
  ["open","mine","assigned","history"].forEach(key=>{
   const el=$({open:"tabOpen",mine:"tabMine",assigned:"tabAssigned",history:"tabHistory"}[key]);
@@ -200,12 +213,12 @@ async function submit(e){
  const values={id:editing,company:$("company").value,process:$("process").value,
  phase:$("process").value==="OFFB"?"OFFB":$("phase").value,text:$("stepText").value.trim()};
  busy=true;$("save").disabled=true;
- try{await call("proposal-save","save",values);cancelEdit();await refresh();message("Voorstel opgeslagen.");}
+ try{await call("proposal-save","save",values);await invalidateBoardProposalCount();cancelEdit();await refresh();message("Voorstel opgeslagen.");}
  catch(e){message(e.message,true)}finally{busy=false;$("save").disabled=false;}
 }
 async function withdraw(p){
  if(!confirm("Dit voorstel intrekken?"))return;
- try{await call("proposal-withdraw","withdraw",{id:p.id});await refresh();message("Voorstel ingetrokken.")}
+ try{await call("proposal-withdraw","withdraw",{id:p.id});await invalidateBoardProposalCount();await refresh();message("Voorstel ingetrokken.")}
  catch(e){message(e.message,true)}
 }
 function showAttention(parent,p){
@@ -274,18 +287,18 @@ async function approve(){
  if(!confirm("Definitief goedkeuren en stappen toevoegen aan de getoonde bronnen?"))return;
  $("approve").disabled=true;
  try{await call("proposal-review","review",{...values,operation:"APPROVE",
-  previewDigest:approvedPreview.digest});closeReview();await refresh();message("Goedgekeurd. De bronchecklists zijn bijgewerkt.");}
+  previewDigest:approvedPreview.digest});await invalidateBoardProposalCount();closeReview();await refresh();message("Goedgekeurd. De bronchecklists zijn bijgewerkt.");}
  catch(e){message(e.message,true);invalidatePreview();await refresh(false).catch(()=>{});}
 }
 async function reject(){
  if(!reviewing)return;
  if(!confirm("Dit voorstel afwijzen?"))return;
  try{await call("proposal-review","review",{id:reviewing.id,operation:"REJECT",
-  reason:$("rejectReason").value.trim()});closeReview();await refresh();message("Voorstel afgewezen.");}
+  reason:$("rejectReason").value.trim()});await invalidateBoardProposalCount();closeReview();await refresh();message("Voorstel afgewezen.");}
  catch(e){message(e.message,true)}
 }
 async function resume(p){
- try{await call("proposal-review","review",{id:p.id,operation:"RESUME"});await refresh();message("Goedkeuring afgerond.");}
+ try{await call("proposal-review","review",{id:p.id,operation:"RESUME"});await invalidateBoardProposalCount();await refresh();message("Goedkeuring afgerond.");}
  catch(e){message(e.message,true)}
 }
 function closeReview(){reviewing=null;approvedPreview=null;$("reviewPanel").classList.add("hidden");}

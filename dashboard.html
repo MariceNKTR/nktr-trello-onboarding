@@ -386,7 +386,7 @@
 
       <div class="card">
         <div class="kpi-label">
-          Onboarded
+          Ooit onboarded
         </div>
         <div
           class="kpi-value"
@@ -396,7 +396,7 @@
 
       <div class="card">
         <div class="kpi-label">
-          Operationeel
+          Nu operationeel
         </div>
         <div
           class="kpi-value"
@@ -406,7 +406,7 @@
 
       <div class="card">
         <div class="kpi-label">
-          Uitstroom
+          In uitstroom
         </div>
         <div
           class="kpi-value"
@@ -436,7 +436,7 @@
 
       <div class="card">
         <div class="kpi-label">
-          Archief
+          Archief (oude teller)
         </div>
         <div
           class="kpi-value"
@@ -444,6 +444,9 @@
         >–</div>
       </div>
 
+      <div class="card"><div class="kpi-label">Archief totaal</div><div class="kpi-value" id="core-archive-all">–</div></div>
+      <div class="card"><div class="kpi-label">Archief checklists voltooid</div><div class="kpi-value" id="core-archive-done">–</div></div>
+      <div class="card"><div class="kpi-label">Archief onvolledig / onbekend</div><div class="kpi-value" id="core-archive-incomplete">–</div></div>
       <div class="card">
         <div class="kpi-label">
           Afwijkend traject
@@ -572,6 +575,21 @@
     const DASHBOARD_DATA_URL =
       "https://nktr-trello-guard.marice-angulo.workers.dev/trello/dashboard/data";
 
+
+    // Supplement existing Guard metrics with additive Core archive breakdown.
+    // Classification is by checklist state, NOT equivalent to formally approved onboarding.
+    async function fetchCoreArchive() {
+      const endpoint="https://nktr-employee-core.marice-angulo.workers.dev/v1/onb/archive";
+      try {
+        const jwt=await t.jwt({state:JSON.stringify({action:"core-onb-archive"})});
+        const res=await fetch(endpoint,{method:"POST",headers:{"Authorization":"Bearer "+jwt,"Content-Type":"application/json"},body:"{}",signal:AbortSignal.timeout(25000)});
+        if(!res.ok)throw new Error("Core unavailable");
+        const d=await res.json();
+        document.getElementById("core-archive-all").textContent=d.total;
+        document.getElementById("core-archive-done").textContent=d.all_checked;
+        document.getElementById("core-archive-incomplete").textContent=d.incomplete+d.without_phase_checklists;
+      }catch(error){console.warn("Archive breakdown unavailable until Employee Core is deployed",error)}
+    }
 
     function getPeriodConfig(
       period
@@ -1250,6 +1268,7 @@
       .catch(
         showError
       );
+    fetchCoreArchive();
 
   </script>
 
