@@ -1581,6 +1581,24 @@ function openNktrDashboard(
    POWER-UP
    ========================================================= */
 
+// Ownership badges share one board-wide summary per connector instance.
+const OWNER_CORE = 'https://nktr-employee-core.marice-angulo.workers.dev';
+let ownerBadgeCache={expires:0,promise:null,board:null,member:null};
+async function getOwnerBadgeSummary(t){
+ const [b,m]=await Promise.all([t.board('id'),t.member('id')]);const now=Date.now();
+ if(ownerBadgeCache.promise&&ownerBadgeCache.expires>now&&ownerBadgeCache.board===b.id&&ownerBadgeCache.member===m.id)return ownerBadgeCache.promise;
+ const promise=(async()=>{const jwt=await t.jwt({state:JSON.stringify({action:'core-onb-owner-summary'})});const r=await fetch(OWNER_CORE+'/v1/onb/owner-summary',{method:'POST',headers:{Authorization:'Bearer '+jwt,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(95000)});const v=await r.json();if(!r.ok)throw Error(v.error||'Verantwoordelijken niet beschikbaar');return v})();
+ ownerBadgeCache={expires:now+60000,promise,board:b.id,member:m.id};
+ try{return await promise}catch(e){if(ownerBadgeCache.promise===promise)ownerBadgeCache={expires:0,promise:null,board:null,member:null};throw e}
+}
+function openOwnerReview(t,cardId=''){
+ return t.modal({url:'./knelpunten.html',title:'STAPVERANTWOORDELIJKEN',fullscreen:true,height:850,args:{ownerMode:true,cardId},callback:()=>{ownerBadgeCache={expires:0,promise:null,board:null,member:null}}});
+}
+function ownerEligible(name){return /\bfase\s*[1-9][0-9]?\b|operational/i.test(name||'')}
+// Do not delay existing card rendering while a cold board-wide scan is loading.
+function quickOwnerSummary(t){return Promise.race([getOwnerBadgeSummary(t),new Promise(resolve=>setTimeout(()=>resolve(null),1800))])}
+function ownerFrontBadge(t){return {dynamic:async function(){try{const card=await t.card('id');const s=await quickOwnerSummary(t);const n=s?.counts?.[card.id]||0;return {text:n?'👤 '+n:'',color:n?'yellow':null,refresh:s?60:15}}catch(e){return {text:'',refresh:60}}}}}
+
 window.TrelloPowerUp.initialize({
 
   /* -------------------------------------------------------
@@ -1624,6 +1642,7 @@ window.TrelloPowerUp.initialize({
     async function(t) {
 
       const proposalsButton = await getProposalsButton(t);
+      const ownerAdmin = await locallyVerifiedParkingAdmin(t);
       return [{
 
         text:
@@ -1639,7 +1658,7 @@ window.TrelloPowerUp.initialize({
               t
             );
           }
-      }, { text:"KNELPUNTEN", condition:"edit", callback:function(t){return t.modal({url:"./knelpunten.html",title:"KNELPUNTEN | ONBOARDING",fullscreen:true,height:850})} }, proposalsButton];
+      }, { text:"KNELPUNTEN", condition:"edit", callback:function(t){return t.modal({url:"./knelpunten.html",title:"KNELPUNTEN | ONBOARDING",fullscreen:true,height:850})} }, ...(ownerAdmin?[{text:"STAPVERANTWOORDELIJKEN",condition:"edit",callback:t=>openOwnerReview(t)}]:[]), proposalsButton];
     },
 
 
@@ -1857,6 +1876,13 @@ window.TrelloPowerUp.initialize({
           }
         }
         return badges;
+      }
+
+      if (!inOffboarding && ownerEligible(listResult.value?.name)) {
+        try {
+          const id=(await t.card('id')).id, summary=await quickOwnerSummary(t), n=summary?.counts?.[id]||0;
+          if(n) badges.push({title:'Afwijkende verantwoordelijken',text:'👤 '+n,color:'yellow',...(summary.can_manage_owners?{callback:t=>openOwnerReview(t,id)}:{})});
+        } catch(error) { console.warn('Verantwoordelijkenstatus niet beschikbaar',error); }
       }
 
       // Contextual card-detail update button, only when review items exist.
@@ -2112,11 +2138,12 @@ window.TrelloPowerUp.initialize({
                   30
               };
             }
-        }];
+        }, ownerFrontBadge(t)];
       }
 
 
       const badges = [];
+      if(ownerEligible(list.name)) badges.push(ownerFrontBadge(t));
 
 
       badges.push({
