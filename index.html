@@ -1642,7 +1642,6 @@ window.TrelloPowerUp.initialize({
     async function(t) {
 
       const proposalsButton = await getProposalsButton(t);
-      const ownerAdmin = await locallyVerifiedParkingAdmin(t);
       return [{
 
         text:
@@ -1658,7 +1657,7 @@ window.TrelloPowerUp.initialize({
               t
             );
           }
-      }, { text:"KNELPUNTEN", condition:"edit", callback:function(t){return t.modal({url:"./knelpunten.html",title:"KNELPUNTEN | ONBOARDING",fullscreen:true,height:850})} }, ...(ownerAdmin?[{text:"STAPVERANTWOORDELIJKEN",condition:"edit",callback:t=>openOwnerReview(t)}]:[]), proposalsButton];
+      }, { text:"KNELPUNTEN", condition:"edit", callback:function(t){return t.modal({url:"./knelpunten.html",title:"KNELPUNTEN | ONBOARDING",fullscreen:true,height:850})} }, proposalsButton];
     },
 
 
