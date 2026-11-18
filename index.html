@@ -1597,7 +1597,7 @@ function openOwnerReview(t,cardId=''){
 function ownerEligible(name){return /\bfase\s*[1-9][0-9]?\b|operational/i.test(name||'')}
 // Do not delay existing card rendering while a cold board-wide scan is loading.
 function quickOwnerSummary(t){return Promise.race([getOwnerBadgeSummary(t),new Promise(resolve=>setTimeout(()=>resolve(null),1800))])}
-function ownerFrontBadge(t){return {dynamic:async function(){try{const card=await t.card('id');const s=await quickOwnerSummary(t);const n=s?.counts?.[card.id]||0;return {text:n?'👤 '+n:'',color:n?'yellow':null,refresh:s?60:15}}catch(e){return {text:'',refresh:60}}}}}
+function ownerFrontBadge(t){return {dynamic:async function(){try{const card=await t.card('id');const s=await quickOwnerSummary(t);const n=s?.counts?.[card.id]||0;return {text:n?'≠𐀪 '+n:'',color:null,refresh:s?60:15}}catch(e){return {text:'',refresh:60}}}}}
 
 window.TrelloPowerUp.initialize({
 
@@ -1880,7 +1880,7 @@ window.TrelloPowerUp.initialize({
       if (!inOffboarding && ownerEligible(listResult.value?.name)) {
         try {
           const id=(await t.card('id')).id, summary=await quickOwnerSummary(t), n=summary?.counts?.[id]||0;
-          if(n) badges.push({title:'Afwijkende verantwoordelijken',text:'👤 '+n,color:'yellow',...(summary.can_manage_owners?{callback:t=>openOwnerReview(t,id)}:{})});
+          if(n) badges.push({title:n+' stappen met een afwijkende verantwoordelijke',text:'≠𐀪 '+n,color:null,...(summary.can_manage_owners?{callback:t=>openOwnerReview(t,id)}:{})});
         } catch(error) { console.warn('Verantwoordelijkenstatus niet beschikbaar',error); }
       }
 
