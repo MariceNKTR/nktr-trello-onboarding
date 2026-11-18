@@ -1,3 +1,4 @@
+```
 <!doctype html>
 <html>
 <head>
@@ -334,6 +335,10 @@
         flex-direction: column;
       }
     }
+    /* StatsBand-inspired typographic strips; no new runtime dependencies. */
+    .kpi-band{margin:0 0 14px}.band-heading{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}.band-heading h2{font-size:10px;letter-spacing:1.15px;margin:0;color:var(--muted);font-weight:750}.band-heading span,.supplement-status{font-size:11px;color:var(--muted)}
+    .kpi-band .kpis{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:0;padding:0}.kpi-band:nth-of-type(2) .kpis{grid-template-columns:repeat(6,minmax(0,1fr))}.metric{padding:12px 12px 11px;min-width:0;border-right:1px solid var(--line)}.metric:last-child{border-right:0}.kpi-label{font-size:11px;margin-bottom:5px;line-height:1.3;overflow-wrap:anywhere}.kpi-value{font-size:clamp(24px,2.6vw,36px);font-variant-numeric:tabular-nums;letter-spacing:-1px;margin:0;line-height:1.15}.supplement-status{margin:0 0 10px}.supplement-status:empty{display:none}
+    @media(max-width:900px){.kpi-band .kpis,.kpi-band:nth-of-type(2) .kpis{grid-template-columns:repeat(auto-fit,minmax(112px,1fr))}.metric{border-bottom:1px solid var(--line);padding:9px}}
   </style>
 </head>
 
@@ -372,100 +377,13 @@
     </div>
 
 
-    <div class="kpis">
-
-      <div class="card">
-        <div class="kpi-label">
-          Onboarding
-        </div>
-        <div
-          class="kpi-value"
-          id="k-onb"
-        >–</div>
-      </div>
-
-      <div class="card">
-        <div class="kpi-label">
-          Ooit onboarded
-        </div>
-        <div
-          class="kpi-value"
-          id="k-onboarded"
-        >–</div>
-      </div>
-
-      <div class="card">
-        <div class="kpi-label">
-          Nu operationeel
-        </div>
-        <div
-          class="kpi-value"
-          id="k-op"
-        >–</div>
-      </div>
-
-      <div class="card">
-        <div class="kpi-label">
-          In uitstroom
-        </div>
-        <div
-          class="kpi-value"
-          id="k-offb"
-        >–</div>
-      </div>
-
-      <div class="card">
-        <div class="kpi-label">
-          Uitgestroomd
-        </div>
-        <div
-          class="kpi-value"
-          id="k-out"
-        >–</div>
-      </div>
-
-      <div class="card">
-        <div class="kpi-label">Parking</div>
-        <div class="kpi-value" id="k-parking">–</div>
-      </div>
-
-      <div class="card">
-        <div class="kpi-label">On hold</div>
-        <div class="kpi-value" id="k-hold">–</div>
-      </div>
-
-      <div class="card">
-        <div class="kpi-label">
-          Archief (oude teller)
-        </div>
-        <div
-          class="kpi-value"
-          id="k-archive"
-        >–</div>
-      </div>
-
-      <div class="card"><div class="kpi-label">Archief totaal</div><div class="kpi-value" id="core-archive-all">–</div></div>
-      <div class="card"><div class="kpi-label">Archief checklists voltooid</div><div class="kpi-value" id="core-archive-done">–</div></div>
-      <div class="card"><div class="kpi-label">Archief onvolledig / onbekend</div><div class="kpi-value" id="core-archive-incomplete">–</div></div>
-      <div class="card">
-        <div class="kpi-label">
-          Afwijkend traject
-        </div>
-        <div
-          class="kpi-value"
-          id="k-dev"
-        >–</div>
-      </div>
-
-    </div>
-
-
+<section class="kpi-band"><div class="band-heading"><h2>01 / ACTIEF</h2><span>PRIO! = niet-gearchiveerde medewerkerskaarten · ongeacht periode</span></div><dl class="kpis"><div class="metric"><dt class="kpi-label">Onboarding</dt><dd class="kpi-value" id="k-onb">–</dd></div><div class="metric"><dt class="kpi-label">Nu operationeel</dt><dd class="kpi-value" id="k-op">–</dd></div><div class="metric"><dt class="kpi-label">In uitstroom</dt><dd class="kpi-value" id="k-offb">–</dd></div><div class="metric"><dt class="kpi-label">Parking</dt><dd class="kpi-value" id="k-parking">–</dd></div><div class="metric"><dt class="kpi-label">On hold</dt><dd class="kpi-value" id="k-hold">–</dd></div><div class="metric"><dt class="kpi-label">Afwijkend traject</dt><dd class="kpi-value" id="k-dev">–</dd></div><div class="metric"><dt class="kpi-label">PRIO!</dt><dd class="kpi-value" id="k-prio">–</dd></div></dl></section><section class="kpi-band"><div class="band-heading"><h2>02 / HISTORIE &amp; ARCHIEF</h2><span>Archiefchecklists: FASE-stappen · geen bewijs van formele goedkeuring</span></div><dl class="kpis"><div class="metric"><dt class="kpi-label">Ooit onboarded</dt><dd class="kpi-value" id="k-onboarded">–</dd></div><div class="metric"><dt class="kpi-label">Uitgestroomd</dt><dd class="kpi-value" id="k-out">–</dd></div><div class="metric"><dt class="kpi-label">Archief (oude teller)</dt><dd class="kpi-value" id="k-archive">–</dd></div><div class="metric"><dt class="kpi-label">Archief totaal</dt><dd class="kpi-value" id="core-archive-all">–</dd></div><div class="metric"><dt class="kpi-label">FASE-checklists voltooid</dt><dd class="kpi-value" id="core-archive-done">–</dd></div><div class="metric"><dt class="kpi-label">FASE onvolledig / onbekend</dt><dd class="kpi-value" id="core-archive-incomplete">–</dd></div></dl></section><p id="supplement-status" class="supplement-status" role="status"></p>
     <div class="grid">
 
       <section class="card">
 
         <h2 class="section-title">
-          Bewegingen
+          Personeelsbewegingen
         </h2>
 
         <p class="section-sub">
@@ -576,20 +494,13 @@
       "https://nktr-trello-guard.marice-angulo.workers.dev/trello/dashboard/data";
 
 
-    // Supplement existing Guard metrics with additive Core archive breakdown.
-    // Classification is by checklist state, NOT equivalent to formally approved onboarding.
-    async function fetchCoreArchive() {
-      const endpoint="https://nktr-employee-core.marice-angulo.workers.dev/v1/onb/archive";
-      try {
-        const jwt=await t.jwt({state:JSON.stringify({action:"core-onb-archive"})});
-        const res=await fetch(endpoint,{method:"POST",headers:{"Authorization":"Bearer "+jwt,"Content-Type":"application/json"},body:"{}",signal:AbortSignal.timeout(25000)});
-        if(!res.ok)throw new Error("Core unavailable");
-        const d=await res.json();
-        document.getElementById("core-archive-all").textContent=d.total;
-        document.getElementById("core-archive-done").textContent=d.all_checked;
-        document.getElementById("core-archive-incomplete").textContent=d.incomplete+d.without_phase_checklists;
-      }catch(error){console.warn("Archive breakdown unavailable until Employee Core is deployed",error)}
-    }
+    // Additive current PRIO and phase-checklist archive counts; independently loaded.
+    const coreBase='https://nktr-employee-core.marice-angulo.workers.dev';
+    async function readCore(path,action){for(let attempt=0;;attempt++){try{const jwt=await t.jwt({state:JSON.stringify({action})});const res=await fetch(coreBase+path,{method:'POST',headers:{Authorization:'Bearer '+jwt,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(140000)});const data=await res.json().catch(()=>({}));if(!res.ok)throw Object.assign(Error(data.error||'Core niet beschikbaar'),{status:res.status});return data}catch(e){if(attempt||!([429,502,503,504].includes(e.status)||e.name==='TimeoutError'||e.name==='TypeError'))throw e;await new Promise(r=>setTimeout(r,2000))}}}
+    const supplementErrors=new Map();function supplementStatus(key,error){if(error)supplementErrors.set(key,error);else supplementErrors.delete(key);document.getElementById('supplement-status').textContent=[...supplementErrors.values()].join(' · ')}
+    function setMetric(id,value,cls=''){const el=document.getElementById(id);el.textContent=String(value);el.className='kpi-value'+(value===0?' is-zero':cls?' '+cls:'')}
+    async function fetchCoreArchive(){try{const d=await readCore('/v1/onb/archive','core-onb-archive');if(![d.total,d.all_checked,d.incomplete,d.without_phase_checklists].every(Number.isInteger)||d.total!==d.all_checked+d.incomplete+d.without_phase_checklists)throw Error('Archiefcijfers niet volledig');setMetric('core-archive-all',d.total);setMetric('core-archive-done',d.all_checked);setMetric('core-archive-incomplete',d.incomplete+d.without_phase_checklists);supplementStatus('archive',null)}catch(e){supplementStatus('archive','Archiefstatistieken tijdelijk niet beschikbaar. Open Inzichten opnieuw.');console.warn(e)}}
+    async function fetchPriority(){try{const d=await readCore('/v1/onb/priority','core-onb-priority');if(!Number.isInteger(d.count))throw Error('PRIO!-telling ontbreekt');setMetric('k-prio',d.count,'status-exception');supplementStatus('priority',null)}catch(e){supplementStatus('priority','PRIO!-telling tijdelijk niet beschikbaar. Open Inzichten opnieuw.');console.warn(e)}}
 
     function getPeriodConfig(
       period
@@ -721,7 +632,13 @@
     }
 
 
-    async function loadDashboard(
+    let dashboardLoading=false;
+    async function loadDashboard(period){
+      if(dashboardLoading)return;dashboardLoading=true;
+      const controls=[...document.querySelectorAll('#filters button')];controls.forEach(b=>b.disabled=true);
+      try{return await loadDashboardData(period)}finally{dashboardLoading=false;controls.forEach(b=>b.disabled=false)}
+    }
+    async function loadDashboardData(
       period
     ) {
 
@@ -800,7 +717,7 @@
               "Authorization":
                 "Bearer " +
                 jwt
-            }
+            }, signal:AbortSignal.timeout(140000)
           }
         );
 
@@ -1269,8 +1186,10 @@
         showError
       );
     fetchCoreArchive();
+    fetchPriority();
 
   </script>
 
 </body>
 </html>
+```

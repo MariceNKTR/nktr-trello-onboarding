@@ -23,7 +23,7 @@ const GUARD_DUPLICATE_URL = "https://nktr-trello-guard.marice-angulo.workers.dev
 const GUARD_DUPLICATE_IGNORE_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/employee/duplicates/ignore";
 const GUARD_RESTORE_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/employee/restore";
 const GUARD_SOURCE_WARNING_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/source/warning/status";
-const DASHBOARD_URL = "./dashboard.html";
+const DASHBOARD_URL = "./dashboard.html?v=3.1";
 const GUARD_ONB_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/onb/request";
 const GUARD_COVER_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/cover/sync";
 const GUARD_REASON_URL = "https://nktr-trello-guard.marice-angulo.workers.dev/trello/offb/reason";
@@ -1587,13 +1587,18 @@ let ownerBadgeCache={expires:0,promise:null,board:null,member:null};
 async function getOwnerBadgeSummary(t){
  const [b,m]=await Promise.all([t.board('id'),t.member('id')]);const now=Date.now();
  if(ownerBadgeCache.promise&&ownerBadgeCache.expires>now&&ownerBadgeCache.board===b.id&&ownerBadgeCache.member===m.id)return ownerBadgeCache.promise;
- const promise=(async()=>{const jwt=await t.jwt({state:JSON.stringify({action:'core-onb-owner-summary'})});const r=await fetch(OWNER_CORE+'/v1/onb/owner-summary',{method:'POST',headers:{Authorization:'Bearer '+jwt,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(95000)});const v=await r.json();if(!r.ok)throw Error(v.error||'Verantwoordelijken niet beschikbaar');return v})();
- ownerBadgeCache={expires:now+60000,promise,board:b.id,member:m.id};
- try{return await promise}catch(e){if(ownerBadgeCache.promise===promise)ownerBadgeCache={expires:0,promise:null,board:null,member:null};throw e}
+ const promise=(async()=>{const jwt=await t.jwt({state:JSON.stringify({action:'core-onb-owner-summary'})});const r=await fetch(OWNER_CORE+'/v1/onb/owner-summary',{method:'POST',headers:{Authorization:'Bearer '+jwt,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(140000)});const v=await r.json();if(!r.ok)throw Error(v.error||'Verantwoordelijken niet beschikbaar');return v})();
+ ownerBadgeCache={expires:Infinity,promise,board:b.id,member:m.id};
+ try{const value=await promise;if(ownerBadgeCache.promise===promise)ownerBadgeCache.expires=Date.now()+60000;return value}catch(e){if(ownerBadgeCache.promise===promise)ownerBadgeCache={expires:0,promise:null,board:null,member:null};throw e}
 }
-function openOwnerReview(t,cardId=''){
- return t.modal({url:'./knelpunten.html',title:'STAPVERANTWOORDELIJKEN',fullscreen:true,height:850,args:{ownerMode:true,cardId},callback:()=>{ownerBadgeCache={expires:0,promise:null,board:null,member:null}}});
+let knelpuntenOpen=false;
+async function openKnelpunten(t,ownerMode=false,cardId=''){
+ if(knelpuntenOpen)return;
+ knelpuntenOpen=true;
+ try{return await t.modal({url:'./knelpunten.html?v=3.1',title:ownerMode?'STAPVERANTWOORDELIJKEN':'KNELPUNTEN | ONBOARDING',fullscreen:true,height:850,args:{ownerMode,cardId},callback:()=>{knelpuntenOpen=false;ownerBadgeCache={expires:0,promise:null,board:null,member:null}}})}
+ catch(e){knelpuntenOpen=false;throw e}
 }
+function openOwnerReview(t,cardId=''){return openKnelpunten(t,true,cardId)}
 function ownerEligible(name){return /\bfase\s*[1-9][0-9]?\b|operational/i.test(name||'')}
 // Do not delay existing card rendering while a cold board-wide scan is loading.
 function quickOwnerSummary(t){return Promise.race([getOwnerBadgeSummary(t),new Promise(resolve=>setTimeout(()=>resolve(null),1800))])}
@@ -1657,7 +1662,7 @@ window.TrelloPowerUp.initialize({
               t
             );
           }
-      }, { text:"KNELPUNTEN", condition:"edit", callback:function(t){return t.modal({url:"./knelpunten.html",title:"KNELPUNTEN | ONBOARDING",fullscreen:true,height:850})} }, proposalsButton];
+      }, { text:"KNELPUNTEN ⧖", condition:"edit", callback:function(t){return openKnelpunten(t)} }, proposalsButton];
     },
 
 
@@ -1867,12 +1872,10 @@ window.TrelloPowerUp.initialize({
         try {
           const archive = await parkingSignedCall(t,"parking-status",GUARD_PARKING_STATUS_URL);
           if (archive.can_archive) badges.push(parkingArchiveBadge());
+          else if(archive.is_admin&&archive.reason)badges.push({title:"Parking",text:archive.reason});
         } catch (error) {
           console.warn("Parking actiecontrole mislukt", error);
-          // Rendering fallback only. Archive itself is still secured by Guard.
-          if (await locallyVerifiedParkingAdmin(t)) {
-            badges.push(parkingArchiveBadge());
-          }
+          // Do not offer archive without authoritative completion and retention status.
         }
         return badges;
       }
