@@ -1605,6 +1605,8 @@ function quickOwnerSummary(t){return Promise.race([getOwnerBadgeSummary(t),new P
 function ownerFrontBadge(t){return {dynamic:async function(){try{const card=await t.card('id');const s=await quickOwnerSummary(t);const n=s?.counts?.[card.id]||0;return {text:n?'≠𐀪 '+n:'',color:null,refresh:s?60:15}}catch(e){return {text:'',refresh:60}}}}}
 
 window.TrelloPowerUp.initialize({
+  'card-back-section': function(t){return {title:'IDENTITEIT / CONTROLE',icon:'https://maricenktr.github.io/nktr-trello-onboarding/identity-icon.svg',content:{type:'iframe',url:t.signUrl('./identity.html'),height:580}};},
+
 
   /* -------------------------------------------------------
      EMPLOYEE CARD: Stap voorstellen
